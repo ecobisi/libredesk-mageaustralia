@@ -572,37 +572,26 @@ func (e *Email) processFullMessage(item imapclient.FetchItemDataBodySection, inc
 
 		// Skip outgoing BCC copies: emails sent BY the system (e.g., abandoned cart reminders)
 	// that land back in the inbox because the system BCCs itself.
-	// Detection: if From is a same-domain address (but not the inbox itself), AND
-	// the inbox address does NOT appear in To/CC/Delivered-To, it's a BCC copy.
-	// If the email is addressed TO the inbox, it's always inbound — process it.
+	// Skip BCC copies of our own outgoing emails.
+	// Only skip if From exactly matches this inbox's own address (agent replies use the inbox address as From).
+	// Do NOT skip same-domain senders - internal addresses like ebay@ or noreply@ are legitimate inbound mail.
 	{
 		fromEmail := strings.ToLower(incomingMsg.Contact.Email.String)
-		fromDomain := ""
-		if parts := strings.SplitN(fromEmail, "@", 2); len(parts) == 2 {
-			fromDomain = parts[1]
-		}
 		inboxAddr, _ := stringutil.ExtractEmail(e.FromAddress())
 		inboxAddr = strings.ToLower(inboxAddr)
-		inboxDomain := ""
-		if parts := strings.SplitN(inboxAddr, "@", 2); len(parts) == 2 {
-			inboxDomain = parts[1]
-		}
 
-		if fromDomain != "" && fromDomain == inboxDomain && fromEmail != inboxAddr {
-			// Same-domain sender. Check if the inbox is in To/CC/Delivered-To.
+		if fromEmail == inboxAddr {
+			// From matches inbox exactly. Check if addressed to inbox (loop) or BCC copy.
 			recipientHeaders := strings.ToLower(
 				envelope.GetHeader("To") + " " +
 					envelope.GetHeader("CC") + " " +
 					envelope.GetHeader("Delivered-To") + " " +
 					envelope.GetHeader("X-Original-To"))
 
-			addressedToInbox := strings.Contains(recipientHeaders, inboxAddr)
-
-			if !addressedToInbox {
+			if !strings.Contains(recipientHeaders, inboxAddr) {
 				e.lo.Info("skipping own outgoing email (BCC copy)", "from", fromEmail, "inbox", inboxAddr, "subject", envelope.GetHeader("Subject"))
 				return nil
 			}
-			e.lo.Debug("same-domain sender but addressed to inbox, treating as inbound", "from", fromEmail, "inbox", inboxAddr, "subject", envelope.GetHeader("Subject"))
 		}
 	}
 
