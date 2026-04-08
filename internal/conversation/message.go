@@ -622,6 +622,18 @@ func (m *Manager) InsertMessage(message *models.Message) error {
 	// Convert HTML content to text for search.
 	message.TextContent = stringutil.HTML2Text(message.Content)
 
+	// Strip quoted thread content to prevent exponential message size growth.
+	// Outgoing messages use <!-- thread --> marker; incoming emails have gmail_quote blockquotes.
+	if idx := strings.Index(message.Content, "<!-- thread -->"); idx > 0 {
+		message.Content = message.Content[:idx]
+	}
+	// For incoming emails, strip excessively large blockquote chains (> 50KB).
+	if len(message.Content) > 50000 {
+		if idx := strings.Index(message.Content, "<blockquote"); idx > 0 && idx < 50000 {
+			message.Content = message.Content[:idx]
+		}
+	}
+
 	// Strip null bytes and control characters that PostgreSQL rejects.
 	message.Content = strings.Map(func(r rune) rune {
 		if r == 0 {
