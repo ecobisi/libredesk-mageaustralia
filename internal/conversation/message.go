@@ -237,6 +237,9 @@ func (m *Manager) sendOutgoingMessage(message models.Message) {
 		})
 	}
 
+	// Mark as sending in DB to prevent duplicate pickup by scanner.
+	m.UpdateMessageStatus(message.UUID, models.MessageStatusSending)
+
 	// Send message
 	err = inbox.Send(message)
 	if handleError(err, "error sending message") {

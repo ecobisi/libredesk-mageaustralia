@@ -45,6 +45,7 @@ var (
 
 	MessageStatusPending  = "pending"
 	MessageStatusSent     = "sent"
+	MessageStatusSending  = "sending"
 	MessageStatusFailed   = "failed"
 	MessageStatusReceived = "received"
 
