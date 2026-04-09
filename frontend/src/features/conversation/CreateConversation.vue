@@ -568,9 +568,8 @@ const handleGenerateResponse = async () => {
       generatedHtml = generatedHtml.replace(/<script[\s\S]*?<\/script>/gi, '')
       generatedHtml = generatedHtml.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '')
 
-      form.setFieldValue('content', generatedHtml)
-      insertContent.value = undefined
-      nextTick(() => { insertContent.value = generatedHtml })
+      // Set content via the editor ref (clears existing and replaces)
+      createEditorRef.value?.editor?.commands.setContent(generatedHtml)
     }
   } catch (err) {
     emitter.emit(EMITTER_EVENTS.SHOW_TOAST, {
