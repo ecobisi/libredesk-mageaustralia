@@ -247,6 +247,7 @@
               @generateResponse="handleGenerateResponse"
               :showSendButton="false"
               :isGenerating="isGenerating"
+              generateLabel="AI Assistance"
             />
             <Button type="submit" :disabled="isDisabled" :isLoading="loading">
               {{ $t('globals.messages.submit') }}

@@ -76,7 +76,7 @@
         :disabled="isGenerating"
       >
         <Sparkles class="h-3.5 w-3.5 mr-1.5" :class="{ 'animate-pulse': isGenerating }" />
-        {{ isGenerating ? 'Generating...' : 'Generate Response' }}
+        {{ isGenerating ? 'Generating...' : generateLabel }}
       </Button>
       <!-- Generate with Orders Button (only shows when ecommerce is configured) -->
       <Button
@@ -172,6 +172,10 @@ defineProps({
   showGenerateButton: {
     type: Boolean,
     default: true
+  },
+  generateLabel: {
+    type: String,
+    default: 'Generate Response'
   },
   showOrdersButton: {
     type: Boolean,
