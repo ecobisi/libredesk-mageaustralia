@@ -12,7 +12,7 @@
           </DialogTitle>
           <DialogDescription />
         </DialogHeader>
-        <form @submit="createConversation" class="flex flex-col flex-1 overflow-hidden">
+        <form @submit.prevent="createConversation" class="flex flex-col flex-1 overflow-hidden">
           <!-- Form Fields Section -->
           <div class="space-y-4 pb-2 flex-shrink-0">
             <div class="space-y-2">

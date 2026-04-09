@@ -68,6 +68,7 @@
       <!-- Generate Response Button -->
       <Button
         v-if="showGenerateButton"
+        type="button"
         variant="outline"
         size="sm"
         class="h-8 px-3 text-xs"
@@ -80,6 +81,7 @@
       <!-- Generate with Orders Button (only shows when ecommerce is configured) -->
       <Button
         v-if="showGenerateButton && showOrdersButton"
+        type="button"
         variant="outline"
         size="sm"
         class="h-8 px-3 text-xs"
