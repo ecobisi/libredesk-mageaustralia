@@ -30,7 +30,7 @@ require (
 	github.com/knadh/smtppool v1.1.0
 	github.com/knadh/stuffbin v1.3.0
 	github.com/lib/pq v1.10.9
-	github.com/mageaustralia/go-pci-scrub v0.2.0
+	github.com/mageaustralia/go-pci-scrub v0.3.0
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/mr-karan/balance v0.0.0-20250317053523-d32c6ade6cf1
 	github.com/redis/go-redis/v9 v9.5.5
