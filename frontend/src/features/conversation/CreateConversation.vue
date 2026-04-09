@@ -245,6 +245,7 @@
               @emojiSelect="handleEmojiSelect"
               @editorCommand="(cmd) => createEditorRef?.runCommand(cmd)"
               :showSendButton="false"
+              :showGenerateButton="false"
             />
             <Button type="submit" :disabled="isDisabled" :isLoading="loading">
               {{ $t('globals.messages.submit') }}
