@@ -244,8 +244,9 @@
               :handleFileUpload="handleFileUpload"
               @emojiSelect="handleEmojiSelect"
               @editorCommand="(cmd) => createEditorRef?.runCommand(cmd)"
+              @generateResponse="handleGenerateResponse"
               :showSendButton="false"
-              :showGenerateButton="false"
+              :isGenerating="isGenerating"
             />
             <Button type="submit" :disabled="isDisabled" :isLoading="loading">
               {{ $t('globals.messages.submit') }}
@@ -524,6 +525,61 @@ const selectContact = (contact) => {
     form.setFieldValue('last_name', contact.last_name || '')
   }
   form.setFieldValue('contact_email', current[0])
+}
+
+const isGenerating = ref(false)
+const handleGenerateResponse = async () => {
+  isGenerating.value = true
+  try {
+    // Use editor content as context for generation
+    const editorHtml = form.values.content || ''
+    const doc = new DOMParser().parseFromString(editorHtml, 'text/html')
+    const editorText = (doc.body.textContent || '').trim()
+
+    if (!editorText) {
+      emitter.emit(EMITTER_EVENTS.SHOW_TOAST, {
+        variant: 'destructive',
+        description: 'Type some context first (e.g. customer question), then click Generate'
+      })
+      return
+    }
+
+    const resp = await api.ragGenerate({
+      conversation_id: 0,
+      inbox_id: Number(form.values.inbox_id) || 0,
+      customer_message: `Customer inquiry: ${editorText}`,
+      include_ecommerce: false,
+      agent_instructions: ''
+    })
+
+    if (resp.data?.data?.response) {
+      const response = resp.data.data.response
+      let generatedHtml
+      if (/<[a-z][\s\S]*>/i.test(response)) {
+        generatedHtml = response
+          .replace(/>\s*\n\s*/g, '>')
+          .replace(/\s*\n\s*</g, '<')
+          .replace(/\n/g, '<br>')
+          .replace(/<li>\s*(<br\s*\/?>\s*)*<\/li>/gi, '')
+          .replace(/<p>\s*(<br\s*\/?>\s*)*<\/p>/gi, '')
+      } else {
+        generatedHtml = '<p>' + response.replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>') + '</p>'
+      }
+      generatedHtml = generatedHtml.replace(/<script[\s\S]*?<\/script>/gi, '')
+      generatedHtml = generatedHtml.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+
+      form.setFieldValue('content', generatedHtml)
+      insertContent.value = undefined
+      nextTick(() => { insertContent.value = generatedHtml })
+    }
+  } catch (err) {
+    emitter.emit(EMITTER_EVENTS.SHOW_TOAST, {
+      variant: 'destructive',
+      description: 'Failed to generate response'
+    })
+  } finally {
+    isGenerating.value = false
+  }
 }
 
 const createConversation = form.handleSubmit(async (values) => {
