@@ -115,9 +115,15 @@ const fetchResults = async (pageNum) => {
     }
     total.value = data.total || 0
     page.value = pageNum
+    // Clear old results before storing new ones to avoid exceeding sessionStorage quota.
+    sessionStorage.removeItem('searchResults')
     sessionStorage.setItem('searchQuery', searchQuery.value)
-    sessionStorage.setItem('searchResults', JSON.stringify(results.value))
     sessionStorage.setItem('searchTotal', String(total.value))
+    try {
+      sessionStorage.setItem('searchResults', JSON.stringify(results.value))
+    } catch {
+      // Results too large for sessionStorage — skip caching.
+    }
   } catch (err) {
     error.value = handleHTTPError(err).message
   } finally {
