@@ -313,7 +313,12 @@ const _buildThread = () => {
       hour: 'numeric', minute: '2-digit'
     })
     const emailDisplay = email ? ' &lt;' + email + '&gt;' : ''
-    html += '<div style="margin:8px 0;"><div style="color:#666;font-size:12px;margin-bottom:4px;">On ' + date + ', ' + name + emailDisplay + ' wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex;">' + m.content + '</blockquote></div>'
+    let content = m.content || ''
+    const quoteIdx = content.indexOf('<div class="gmail_quote">')
+    if (quoteIdx > -1) {
+      content = content.substring(0, quoteIdx)
+    }
+    html += '<div style="margin:8px 0;"><div style="color:#666;font-size:12px;margin-bottom:4px;">On ' + date + ', ' + name + emailDisplay + ' wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex;">' + content + '</blockquote></div>'
   }
   return html
 }
