@@ -46,6 +46,99 @@
         <Button
           size="sm"
           variant="ghost"
+          @click.prevent="editor?.chain().focus().toggleUnderline().run()"
+          :class="{ 'bg-gray-200 dark:bg-secondary': editor?.isActive('underline') }"
+        >
+          <UnderlineIcon size="14" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          @click.prevent="editor?.chain().focus().toggleStrike().run()"
+          :class="{ 'bg-gray-200 dark:bg-secondary': editor?.isActive('strike') }"
+        >
+          <Strikethrough size="14" />
+        </Button>
+        <!-- Text color -->
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <Button size="sm" variant="ghost" class="flex items-center">
+              <Palette size="14" />
+              <ChevronDown class="w-3 h-3 ml-0.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent class="p-2 w-auto">
+            <div class="text-xs text-muted-foreground mb-1">Text color</div>
+            <div class="grid grid-cols-8 gap-1">
+              <button
+                v-for="c in paletteColors"
+                :key="'fg-' + c"
+                class="w-5 h-5 rounded border border-gray-300 hover:scale-110 transition"
+                :style="{ backgroundColor: c }"
+                @click.prevent="editor?.chain().focus().setColor(c).run()"
+              />
+              <button
+                class="w-5 h-5 rounded border border-gray-300 text-xs"
+                title="Clear"
+                @click.prevent="editor?.chain().focus().unsetColor().run()"
+              >×</button>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <!-- Highlight color -->
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <Button size="sm" variant="ghost" class="flex items-center">
+              <Highlighter size="14" />
+              <ChevronDown class="w-3 h-3 ml-0.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent class="p-2 w-auto">
+            <div class="text-xs text-muted-foreground mb-1">Highlight</div>
+            <div class="grid grid-cols-8 gap-1">
+              <button
+                v-for="c in highlightColors"
+                :key="'bg-' + c"
+                class="w-5 h-5 rounded border border-gray-300 hover:scale-110 transition"
+                :style="{ backgroundColor: c }"
+                @click.prevent="editor?.chain().focus().toggleHighlight({ color: c }).run()"
+              />
+              <button
+                class="w-5 h-5 rounded border border-gray-300 text-xs"
+                title="Clear"
+                @click.prevent="editor?.chain().focus().unsetHighlight().run()"
+              >×</button>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <!-- Alignment -->
+        <Button
+          size="sm"
+          variant="ghost"
+          @click.prevent="editor?.chain().focus().setTextAlign('left').run()"
+          :class="{ 'bg-gray-200 dark:bg-secondary': editor?.isActive({ textAlign: 'left' }) }"
+        >
+          <AlignLeft size="14" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          @click.prevent="editor?.chain().focus().setTextAlign('center').run()"
+          :class="{ 'bg-gray-200 dark:bg-secondary': editor?.isActive({ textAlign: 'center' }) }"
+        >
+          <AlignCenter size="14" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          @click.prevent="editor?.chain().focus().setTextAlign('right').run()"
+          :class="{ 'bg-gray-200 dark:bg-secondary': editor?.isActive({ textAlign: 'right' }) }"
+        >
+          <AlignRight size="14" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
           @click.prevent="editor?.chain().focus().toggleBulletList().run()"
           :class="{ 'bg-gray-200 dark:bg-secondary': editor?.isActive('bulletList') }"
         >
@@ -152,12 +245,19 @@ import {
   ChevronDown,
   Bold,
   Italic,
+  Underline as UnderlineIcon,
+  Strikethrough,
   Bot,
   List,
   ListOrdered,
-Link as LinkIcon,
+  Link as LinkIcon,
   Image as ImageIcon,
-  Loader2
+  Loader2,
+  Palette,
+  Highlighter,
+  AlignLeft,
+  AlignCenter,
+  AlignRight
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import {
@@ -178,6 +278,11 @@ import {
 import Placeholder from '@tiptap/extension-placeholder'
 import Image from '@tiptap/extension-image'
 import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
+import TextStyle from '@tiptap/extension-text-style'
+import Color from '@tiptap/extension-color'
+import Highlight from '@tiptap/extension-highlight'
+import TextAlign from '@tiptap/extension-text-align'
 import { liftListItem as pmLiftListItem } from '@tiptap/pm/schema-list'
 import Link from '@tiptap/extension-link'
 import Mention from '@tiptap/extension-mention'
@@ -193,6 +298,17 @@ import api from '@/api'
 
 const textContent = defineModel('textContent', { default: '' })
 const htmlContent = defineModel('htmlContent', { default: '' })
+
+const paletteColors = [
+  '#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#ffffff',
+  '#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff',
+  '#9900ff', '#ff00ff', '#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3',
+  '#c9daf8', '#cfe2f3', '#d9d2e9', '#ead1dc'
+]
+const highlightColors = [
+  '#ffff00', '#ffcc00', '#ff9900', '#ff6600', '#ff0000', '#ff00ff', '#9900ff', '#0000ff',
+  '#00ffff', '#00ff00', '#99cc00', '#cccccc', '#fce5cd', '#fff2cc', '#d9ead3', '#c9daf8'
+]
 const showLinkDialog = ref(false)
 const linkUrl = ref('')
 const imageInput = ref(null)
@@ -591,6 +707,11 @@ const isInternalUpdate = ref(false)
 const buildExtensions = () => {
   const extensions = [
     StarterKit.configure(),
+    Underline,
+    TextStyle,
+    Color,
+    Highlight.configure({ multicolor: true }),
+    TextAlign.configure({ types: ['heading', 'paragraph'] }),
     ResizableImage.configure({
       HTMLAttributes: { class: 'inline-image', style: 'max-width: 100%; height: auto;' },
       allowBase64: false,
