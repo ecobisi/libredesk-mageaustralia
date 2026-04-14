@@ -927,6 +927,15 @@ export const useConversationStore = defineStore('conversation', () => {
           conversations.data = conversations.data.filter(c => c.uuid !== uuid)
           conversations.total = Math.max(0, conversations.total - 1)
         }
+        // For SPAM/TRASH: server-side filtered by exact status — remove if no longer matches.
+        if (conversations.listType === CONVERSATION_LIST_TYPE.SPAM && value !== 'Spam') {
+          conversations.data = conversations.data.filter(c => c.uuid !== uuid)
+          conversations.total = Math.max(0, conversations.total - 1)
+        }
+        if (conversations.listType === CONVERSATION_LIST_TYPE.TRASH && value !== 'Trashed') {
+          conversations.data = conversations.data.filter(c => c.uuid !== uuid)
+          conversations.total = Math.max(0, conversations.total - 1)
+        }
         // For normal inbox: the computed conversationsList filter handles it
       }
 
