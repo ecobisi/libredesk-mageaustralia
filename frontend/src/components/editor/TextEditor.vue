@@ -2,7 +2,7 @@
   <div class="editor-wrapper h-full overflow-y-auto" :class="{ 'pointer-events-none': disabled }">
     <BubbleMenu
       :editor="editor"
-      :tippy-options="{ duration: 100 }"
+      :tippy-options="{ duration: 100, maxWidth: 'none' }"
       v-if="editor"
       class="bg-background p-1 box will-change-transform"
     >
