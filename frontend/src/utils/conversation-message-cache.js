@@ -145,4 +145,12 @@ export default class MessageCache {
             this.cache.delete(removed)
         }
     }
+
+    /**
+     * Drops all cached pages for a conversation, forcing the next fetch to re-query the server.
+     */
+    invalidate (convId) {
+        this.cache.delete(convId)
+        this.recentConvs = this.recentConvs.filter(id => id !== convId)
+    }
 }

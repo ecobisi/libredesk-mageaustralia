@@ -796,6 +796,11 @@ export const useConversationStore = defineStore('conversation', () => {
     }
     if (conv.uuid !== conversation?.data?.uuid) {
       conv.unread_message_count = (conv.unread_message_count || 0) + 1
+      // Invalidate any stale cached messages for this conversation so the next open re-fetches.
+      // The fetch-by-id path can silently drop the message if there's no cache entry yet (race
+      // with the initial fetchMessages, or WS reconnect after a disconnect), leaving stale pages.
+      messages.data.invalidate(conv.uuid)
+      incrementMessageVersion()
     }
   }
 

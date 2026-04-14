@@ -240,7 +240,7 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { useEditor, EditorContent, BubbleMenu } from '@tiptap/vue-3'
+import { useEditor, EditorContent, BubbleMenu, Extension } from '@tiptap/vue-3'
 import {
   ChevronDown,
   Bold,
@@ -284,6 +284,37 @@ import Color from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
 import TextAlign from '@tiptap/extension-text-align'
 import { liftListItem as pmLiftListItem } from '@tiptap/pm/schema-list'
+
+const ListExitExtension = Extension.create({
+  name: 'listExit',
+  addKeyboardShortcuts() {
+    return {
+      Enter: ({ editor }) => {
+        const { state, view } = editor
+        const { $from, empty } = state.selection
+        if (!empty) return false
+        const listItemType = state.schema.nodes.listItem
+        if (!listItemType) return false
+        // Walk up the node hierarchy looking for a listItem ancestor.
+        let liDepth = -1
+        for (let d = $from.depth; d > 0; d--) {
+          if ($from.node(d).type === listItemType) { liDepth = d; break }
+        }
+        if (liDepth === -1) return false
+        // The listItem is empty iff it has a single child (paragraph) with no visible content.
+        const li = $from.node(liDepth)
+        if (li.childCount !== 1) return false
+        const para = li.firstChild
+        if (!para) return false
+        // Empty paragraph or a paragraph that only contains a single hardBreak.
+        const emptyPara = para.content.size === 0 ||
+          (para.childCount === 1 && para.firstChild?.type?.name === 'hardBreak')
+        if (!emptyPara) return false
+        return pmLiftListItem(listItemType)(state, view.dispatch)
+      },
+    }
+  },
+})
 import Link from '@tiptap/extension-link'
 import Mention from '@tiptap/extension-mention'
 import Table from '@tiptap/extension-table'
@@ -707,6 +738,7 @@ const isInternalUpdate = ref(false)
 const buildExtensions = () => {
   const extensions = [
     StarterKit.configure(),
+    ListExitExtension,
     Underline,
     TextStyle,
     Color,
@@ -778,19 +810,7 @@ const editor = useEditor({
         emit('send')
         return true
       }
-      // Exit list on Enter in empty list item (splitListItem bails on this case)
-      if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
-        const { state } = view
-        const { $from } = state.selection
-        if ($from.parent.content.size === 0 && $from.depth >= 3) {
-          const listItemType = state.schema.nodes.listItem
-          if ($from.node(-1).type === listItemType) {
-            if (pmLiftListItem(listItemType)(state, view.dispatch)) {
-              return true
-            }
-          }
-        }
-      }
+      // Enter-in-empty-list-item handled by ListExitExtension (ProseMirror keymap).
     }
   },
   onUpdate: ({ editor }) => {
