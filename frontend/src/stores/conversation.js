@@ -215,6 +215,7 @@ export const useConversationStore = defineStore('conversation', () => {
   })
 
   let seenConversationUUIDs = new Map()
+  let _listFetchToken = 0
   const emitter = useEmitter()
 
   const incrementMessageVersion = () => setTimeout(() => messages.version++, 0)
@@ -551,6 +552,8 @@ export const useConversationStore = defineStore('conversation', () => {
 
   async function fetchConversationsList (showLoader = true, listType = null, teamID = 0, filters = [], viewID = 0, page = 0) {
     if (!listType) return
+    // Bump request token so any in-flight earlier fetch's response is discarded.
+    const myToken = ++_listFetchToken
     if (conversations.listType !== listType || conversations.teamID !== teamID || conversations.viewID !== viewID) {
       resetConversations()
     }
@@ -579,12 +582,15 @@ export const useConversationStore = defineStore('conversation', () => {
       if (page === 0)
         page = conversations.page
       const response = await makeConversationListRequest(listType, teamID, viewID, filters, page)
+      // Discard if a newer fetch has been initiated while this one was in flight.
+      if (myToken !== _listFetchToken) return
       processConversationListResponse(response)
     } catch (error) {
+      if (myToken !== _listFetchToken) return
       conversations.errorMessage = handleHTTPError(error).message
       conversations.total = 0
     } finally {
-      conversations.loading = false
+      if (myToken === _listFetchToken) conversations.loading = false
     }
   }
 
