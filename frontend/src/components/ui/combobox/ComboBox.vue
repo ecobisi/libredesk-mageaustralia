@@ -11,7 +11,7 @@
         <CaretSortIcon class="h-4 w-4 shrink-0 opacity-50" />
       </Button>
     </PopoverTrigger>
-    <PopoverContent class="p-0">
+    <PopoverContent class="p-0 flex flex-col overflow-hidden max-h-[var(--radix-popover-content-available-height)]" :collision-padding="8">
       <Command>
         <CommandInput class="h-9" :placeholder="placeholder" />
         <CommandEmpty>Not found.</CommandEmpty>
