@@ -8,6 +8,57 @@
       <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('toggleItalic')">
         <Italic class="h-3.5 w-3.5" />
       </Toggle>
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('toggleUnderline')">
+        <UnderlineIcon class="h-3.5 w-3.5" />
+      </Toggle>
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('toggleStrike')">
+        <Strikethrough class="h-3.5 w-3.5" />
+      </Toggle>
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline">
+            <Palette class="h-3.5 w-3.5" />
+          </Toggle>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent class="p-2 w-auto">
+          <div class="text-xs text-muted-foreground mb-1">Text color</div>
+          <div class="grid grid-cols-8 gap-1">
+            <button v-for="c in paletteColors" :key="'fg-' + c"
+              class="w-5 h-5 rounded border border-gray-300 hover:scale-110 transition"
+              :style="{ backgroundColor: c }"
+              @click.prevent="emitCommand('setColor', c)" />
+            <button class="w-5 h-5 rounded border border-gray-300 text-xs" title="Clear"
+              @click.prevent="emitCommand('unsetColor')">×</button>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline">
+            <Highlighter class="h-3.5 w-3.5" />
+          </Toggle>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent class="p-2 w-auto">
+          <div class="text-xs text-muted-foreground mb-1">Highlight</div>
+          <div class="grid grid-cols-8 gap-1">
+            <button v-for="c in highlightColors" :key="'bg-' + c"
+              class="w-5 h-5 rounded border border-gray-300 hover:scale-110 transition"
+              :style="{ backgroundColor: c }"
+              @click.prevent="emitCommand('toggleHighlight', c)" />
+            <button class="w-5 h-5 rounded border border-gray-300 text-xs" title="Clear"
+              @click.prevent="emitCommand('unsetHighlight')">×</button>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('setTextAlign', 'left')">
+        <AlignLeft class="h-3.5 w-3.5" />
+      </Toggle>
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('setTextAlign', 'center')">
+        <AlignCenter class="h-3.5 w-3.5" />
+      </Toggle>
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('setTextAlign', 'right')">
+        <AlignRight class="h-3.5 w-3.5" />
+      </Toggle>
       <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('toggleBulletList')">
         <List class="h-3.5 w-3.5" />
       </Toggle>
@@ -136,7 +187,7 @@ import { ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { Button } from '@/components/ui/button'
 import { Toggle } from '@/components/ui/toggle'
-import { Paperclip, Smile, Sparkles, ShoppingCart, Zap, ChevronDown, ChevronUp, ALargeSmall, Bold, Italic, List, ListOrdered, Link as LinkIcon, Image as ImageIcon, Trash2 } from 'lucide-vue-next'
+import { Paperclip, Smile, Sparkles, ShoppingCart, Zap, ChevronDown, ChevronUp, ALargeSmall, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Palette, Highlighter, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Link as LinkIcon, Image as ImageIcon, Trash2 } from 'lucide-vue-next'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -225,9 +276,20 @@ function handleGenerateWithOrders() {
   emit('generateWithOrders')
 }
 
-function emitCommand(command) {
-  emit('editorCommand', command)
+function emitCommand(command, arg) {
+  emit('editorCommand', { command, arg })
 }
+
+const paletteColors = [
+  '#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#ffffff',
+  '#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff',
+  '#9900ff', '#ff00ff', '#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3',
+  '#c9daf8', '#cfe2f3', '#d9d2e9', '#ead1dc'
+]
+const highlightColors = [
+  '#ffff00', '#ffcc00', '#ff9900', '#ff6600', '#ff0000', '#ff00ff', '#9900ff', '#0000ff',
+  '#00ffff', '#00ff00', '#99cc00', '#cccccc', '#fce5cd', '#fff2cc', '#d9ead3', '#c9daf8'
+]
 
 function openMacroPicker() {
   emitter.emit(EMITTER_EVENTS.SET_NESTED_COMMAND, {

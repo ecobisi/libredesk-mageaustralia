@@ -436,8 +436,12 @@ const handleEmojiSelect = (emoji) => {
   nextTick(() => (insertContent.value = emoji))
 }
 
-const handleEditorCommand = (command) => {
-  editorRef.value?.runCommand(command)
+const handleEditorCommand = (payload) => {
+  if (typeof payload === 'string') {
+    editorRef.value?.runCommand(payload)
+  } else {
+    editorRef.value?.runCommand(payload.command, payload.arg)
+  }
 }
 
 const handleAiPromptSelected = (key) => {

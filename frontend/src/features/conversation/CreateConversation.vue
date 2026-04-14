@@ -243,7 +243,7 @@
             <ReplyBoxMenuBar
               :handleFileUpload="handleFileUpload"
               @emojiSelect="handleEmojiSelect"
-              @editorCommand="(cmd) => createEditorRef?.runCommand(cmd)"
+              @editorCommand="(p) => typeof p === 'string' ? createEditorRef?.runCommand(p) : createEditorRef?.runCommand(p.command, p.arg)"
               @generateResponse="handleGenerateResponse"
               :showSendButton="false"
               :isGenerating="isGenerating"

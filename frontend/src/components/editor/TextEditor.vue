@@ -865,13 +865,21 @@ const focus = () => {
   editor.value?.commands.focus()
 }
 
-const runCommand = (command) => {
+const runCommand = (command, arg) => {
   if (!editor.value) return
+  const c = editor.value.chain().focus()
   switch (command) {
-    case 'toggleBold': editor.value.chain().focus().toggleBold().run(); break
-    case 'toggleItalic': editor.value.chain().focus().toggleItalic().run(); break
-    case 'toggleBulletList': editor.value.chain().focus().toggleBulletList().run(); break
-    case 'toggleOrderedList': editor.value.chain().focus().toggleOrderedList().run(); break
+    case 'toggleBold': c.toggleBold().run(); break
+    case 'toggleItalic': c.toggleItalic().run(); break
+    case 'toggleUnderline': c.toggleUnderline().run(); break
+    case 'toggleStrike': c.toggleStrike().run(); break
+    case 'toggleBulletList': c.toggleBulletList().run(); break
+    case 'toggleOrderedList': c.toggleOrderedList().run(); break
+    case 'setColor': c.setColor(arg).run(); break
+    case 'unsetColor': c.unsetColor().run(); break
+    case 'toggleHighlight': c.toggleHighlight({ color: arg }).run(); break
+    case 'unsetHighlight': c.unsetHighlight().run(); break
+    case 'setTextAlign': c.setTextAlign(arg).run(); break
     case 'openLink': openLinkModal(); break
     case 'insertImage': triggerImageUpload(); break
   }
