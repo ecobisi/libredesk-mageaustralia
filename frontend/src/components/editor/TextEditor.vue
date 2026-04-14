@@ -811,13 +811,14 @@ const editor = useEditor({
 watch(
   htmlContent,
   (newContent) => {
-    if (!isInternalUpdate.value && editor.value && newContent !== editor.value.getHTML()) {
-      editor.value.commands.setContent(newContent || '', false)
-      textContent.value = editor.value.getText()
-      editor.value.commands.focus('start')
-    }
+    if (isInternalUpdate.value || !editor.value) return
+    if (newContent === editor.value.getHTML()) return
+    const wasFocused = editor.value.isFocused
+    editor.value.commands.setContent(newContent || '', false)
+    textContent.value = editor.value.getText()
+    if (!wasFocused) editor.value.commands.focus('start')
   },
-  { immediate: true }
+  { immediate: true, flush: 'sync' }
 )
 
 watch(
