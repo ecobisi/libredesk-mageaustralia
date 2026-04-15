@@ -84,6 +84,7 @@ type TrashSettings struct {
 
 // PCISettings holds PCI data notification configuration.
 type PCISettings struct {
-	NotifyAgentID int    `json:"pci.notify_agent_id" db:"pci.notify_agent_id"`
-	NotifyMethod  string `json:"pci.notify_method" db:"pci.notify_method"` // "in_app", "email", "both"
+	NotifyAgentID  int      `json:"pci.notify_agent_id" db:"pci.notify_agent_id"`
+	NotifyMethod   string   `json:"pci.notify_method" db:"pci.notify_method"` // "in_app", "email", "both"
+	IgnoreSubjects []string `json:"pci.ignore_subjects" db:"pci.ignore_subjects"`
 }

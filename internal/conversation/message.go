@@ -680,6 +680,23 @@ func (m *Manager) InsertMessage(message *models.Message) error {
 				}
 			}
 		}
+		// Check global PCI subject ignore list (case-insensitive substring match).
+		if !skipPCI && message.Subject != "" {
+			if pciCfg, err := m.settingsStore.GetPCISettings(); err == nil {
+				subjLower := strings.ToLower(message.Subject)
+				for _, needle := range pciCfg.IgnoreSubjects {
+					needle = strings.TrimSpace(needle)
+					if needle == "" {
+						continue
+					}
+					if strings.Contains(subjLower, strings.ToLower(needle)) {
+						skipPCI = true
+						m.lo.Info("skipping PCI scan — subject matches ignore list", "message_id", message.ID, "needle", needle)
+						break
+					}
+				}
+			}
+		}
 		if !skipPCI {
 			result := pciscrub.ScrubWithSpans(message.TextContent)
 			if len(result.Spans) > 0 {

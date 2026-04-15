@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import Spinner from '@/components/ui/spinner/Spinner.vue'
 import { ShieldAlert } from 'lucide-vue-next'
 
@@ -15,6 +16,7 @@ const saving = ref(false)
 
 const notifyAgentId = ref(0)
 const notifyMethod = ref('both')
+const ignoreSubjects = ref('')
 const agents = ref([])
 
 onMounted(async () => {
@@ -41,6 +43,9 @@ async function fetchSettings() {
     if (data['pci.notify_method']) {
       notifyMethod.value = data['pci.notify_method']
     }
+    if (Array.isArray(data['pci.ignore_subjects'])) {
+      ignoreSubjects.value = data['pci.ignore_subjects'].join('\n')
+    }
   } catch (err) {
     console.error('Failed to load PCI settings', err)
   } finally {
@@ -53,7 +58,11 @@ async function saveSettings() {
   try {
     await api.updateSettings('pci', {
       'pci.notify_agent_id': parseInt(notifyAgentId.value) || 0,
-      'pci.notify_method': notifyMethod.value || 'both'
+      'pci.notify_method': notifyMethod.value || 'both',
+      'pci.ignore_subjects': ignoreSubjects.value
+        .split('\n')
+        .map(s => s.trim())
+        .filter(s => s.length > 0)
     })
     toast.success('PCI settings saved')
   } catch (err) {
@@ -117,6 +126,19 @@ async function saveSettings() {
                   <SelectItem value="both">Both (in-app + email)</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div class="space-y-2">
+              <Label>Skip PCI scan for these subjects</Label>
+              <Textarea
+                v-model="ignoreSubjects"
+                class="max-w-2xl font-mono text-sm"
+                rows="5"
+                placeholder="You have received a payment for Invoice&#10;Stripe receipt"
+              />
+              <p class="text-xs text-muted-foreground">
+                One pattern per line. Incoming messages whose subject contains any of these (case-insensitive) will skip credit-card scanning entirely. Useful for payment-processor notifications that legitimately contain masked card digits.
+              </p>
             </div>
 
             <div class="pt-4">
