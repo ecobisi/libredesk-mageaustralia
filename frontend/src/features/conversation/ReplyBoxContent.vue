@@ -173,6 +173,7 @@
       :isGenerating="isGenerating"
       :enableSend="enableSend"
       :handleSend="handleSend"
+      :editor="editorRef?.editor"
       :messageType="messageType"
       :showGenerateButton="messageType === 'reply' || messageType === 'forward'"
       :showOrdersButton="ecommerceConfigured"

@@ -296,21 +296,26 @@ const ListExitExtension = Extension.create({
         if (!empty) return false
         const listItemType = state.schema.nodes.listItem
         if (!listItemType) return false
-        // Walk up the node hierarchy looking for a listItem ancestor.
+        // Walk up looking for the nearest listItem ancestor.
         let liDepth = -1
         for (let d = $from.depth; d > 0; d--) {
           if ($from.node(d).type === listItemType) { liDepth = d; break }
         }
         if (liDepth === -1) return false
-        // The listItem is empty iff it has a single child (paragraph) with no visible content.
-        const li = $from.node(liDepth)
-        if (li.childCount !== 1) return false
-        const para = li.firstChild
+        // The node directly inside the listItem that contains the cursor (usually a paragraph).
+        const paraDepth = liDepth + 1
+        if (paraDepth > $from.depth) return false
+        const para = $from.node(paraDepth)
         if (!para) return false
-        // Empty paragraph or a paragraph that only contains a single hardBreak.
+        // Is the current paragraph empty (no content, or only a trailing hardBreak)?
         const emptyPara = para.content.size === 0 ||
           (para.childCount === 1 && para.firstChild?.type?.name === 'hardBreak')
         if (!emptyPara) return false
+        // Only lift if this empty paragraph is the LAST child of the listItem — otherwise there's
+        // meaningful content after the cursor inside this item and we should let the default run.
+        const li = $from.node(liDepth)
+        const idxInLi = $from.index(liDepth)
+        if (idxInLi !== li.childCount - 1) return false
         return pmLiftListItem(listItemType)(state, view.dispatch)
       },
     }

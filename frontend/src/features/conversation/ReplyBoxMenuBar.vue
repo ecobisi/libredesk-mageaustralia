@@ -2,16 +2,16 @@
   <div class="relative">
     <!-- Formatting toolbar (toggled) -->
     <div v-if="isToolbarVisible" class="flex items-center gap-1 px-2 py-1 border-t border-border bg-muted/30">
-      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('toggleBold')">
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" :pressed="isBoldActive" @click="emitCommand('toggleBold')">
         <Bold class="h-3.5 w-3.5" />
       </Toggle>
-      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('toggleItalic')">
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" :pressed="isItalicActive" @click="emitCommand('toggleItalic')">
         <Italic class="h-3.5 w-3.5" />
       </Toggle>
-      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('toggleUnderline')">
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" :pressed="isUnderlineActive" @click="emitCommand('toggleUnderline')">
         <UnderlineIcon class="h-3.5 w-3.5" />
       </Toggle>
-      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('toggleStrike')">
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" :pressed="isStrikeActive" @click="emitCommand('toggleStrike')">
         <Strikethrough class="h-3.5 w-3.5" />
       </Toggle>
       <DropdownMenu>
@@ -59,10 +59,10 @@
       <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('setTextAlign', 'right')">
         <AlignRight class="h-3.5 w-3.5" />
       </Toggle>
-      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('toggleBulletList')">
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" :pressed="isBulletActive" @click="emitCommand('toggleBulletList')">
         <List class="h-3.5 w-3.5" />
       </Toggle>
-      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('toggleOrderedList')">
+      <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" :pressed="isOrderedActive" @click="emitCommand('toggleOrderedList')">
         <ListOrdered class="h-3.5 w-3.5" />
       </Toggle>
       <Toggle class="px-2 py-1.5 h-7 border-0" variant="outline" @click="emitCommand('openLink')">
@@ -183,7 +183,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { Button } from '@/components/ui/button'
 import { Toggle } from '@/components/ui/toggle'
@@ -207,7 +207,8 @@ const emojiPickerRef = ref(null)
 const emit = defineEmits(['emojiSelect', 'generateResponse', 'generateWithOrders', 'sendWithStatus', 'deleteDraft', 'editorCommand'])
 
 // Using defineProps for props that don't need two-way binding
-defineProps({
+const props = defineProps({
+  editor: { type: Object, default: null },
   isFullscreen: Boolean,
   isSending: Boolean,
   isGenerating: {
@@ -279,6 +280,35 @@ function handleGenerateWithOrders() {
 function emitCommand(command, arg) {
   emit('editorCommand', { command, arg })
 }
+
+// Reactive editor-state tracking for toolbar button active states.
+// The Tiptap editor instance isn't auto-reactive when passed across components,
+// so we bump a tick ref on every selection/transaction and drive computeds from it.
+const editorTick = ref(0)
+let attachedEditor = null
+const attachListener = (ed) => {
+  if (attachedEditor === ed) return
+  if (attachedEditor) {
+    attachedEditor.off('selectionUpdate', onEditorTick)
+    attachedEditor.off('transaction', onEditorTick)
+  }
+  attachedEditor = ed || null
+  if (attachedEditor) {
+    attachedEditor.on('selectionUpdate', onEditorTick)
+    attachedEditor.on('transaction', onEditorTick)
+    editorTick.value++
+  }
+}
+const onEditorTick = () => { editorTick.value++ }
+watch(() => props.editor, attachListener, { immediate: true })
+onBeforeUnmount(() => attachListener(null))
+
+const isBulletActive = computed(() => { editorTick.value; return !!props.editor?.isActive('bulletList') })
+const isOrderedActive = computed(() => { editorTick.value; return !!props.editor?.isActive('orderedList') })
+const isBoldActive = computed(() => { editorTick.value; return !!props.editor?.isActive('bold') })
+const isItalicActive = computed(() => { editorTick.value; return !!props.editor?.isActive('italic') })
+const isUnderlineActive = computed(() => { editorTick.value; return !!props.editor?.isActive('underline') })
+const isStrikeActive = computed(() => { editorTick.value; return !!props.editor?.isActive('strike') })
 
 const paletteColors = [
   '#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#ffffff',
