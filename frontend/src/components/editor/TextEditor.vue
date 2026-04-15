@@ -287,6 +287,7 @@ import { liftListItem as pmLiftListItem } from '@tiptap/pm/schema-list'
 
 const ListExitExtension = Extension.create({
   name: 'listExit',
+  priority: 1000,
   addKeyboardShortcuts() {
     return {
       Enter: ({ editor }) => {
