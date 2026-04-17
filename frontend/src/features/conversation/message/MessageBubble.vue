@@ -245,7 +245,7 @@
       </button>
       <!-- Zoomable image -->
       <div
-        class="overflow-hidden"
+        :class="zoomScale > 1 ? 'overflow-visible' : 'overflow-hidden'"
         style="max-width: 90vw; max-height: 90vh;"
         @mousedown.prevent="startPan"
         @touchstart.prevent="handleTouchStart"
