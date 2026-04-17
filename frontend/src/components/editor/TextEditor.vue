@@ -692,6 +692,26 @@ const ResizableImage = Image.extend({
         })
         toolbar.appendChild(btn)
       })
+
+      // Separator + Remove button
+      const sep = document.createElement('span')
+      sep.classList.add('image-toolbar-sep')
+      toolbar.appendChild(sep)
+
+      const removeBtn = document.createElement('button')
+      removeBtn.textContent = 'Remove'
+      removeBtn.type = 'button'
+      removeBtn.classList.add('image-toolbar-remove')
+      removeBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const pos = getPos()
+        if (typeof pos === 'number') {
+          nodeEditor.chain().focus().deleteRange({ from: pos, to: pos + 1 }).run()
+        }
+      })
+      toolbar.appendChild(removeBtn)
+
       wrapper.appendChild(toolbar)
 
       // Resize handle (bottom-right corner)
@@ -1060,6 +1080,23 @@ defineExpose({ focus, extractMentions, editor, runCommand })
         &:hover {
           background: hsl(var(--accent));
           color: hsl(var(--accent-foreground));
+        }
+      }
+
+      .image-toolbar-sep {
+        width: 1px;
+        height: 14px;
+        background: hsl(var(--border));
+        margin: 0 2px;
+        align-self: center;
+      }
+
+      .image-toolbar-remove {
+        color: hsl(var(--destructive)) !important;
+
+        &:hover {
+          background: hsl(var(--destructive) / 0.1) !important;
+          color: hsl(var(--destructive)) !important;
         }
       }
     }
