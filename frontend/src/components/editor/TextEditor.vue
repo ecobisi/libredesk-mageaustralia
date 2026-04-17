@@ -382,15 +382,14 @@ const emit = defineEmits(['send', 'aiPromptSelected', 'mentionsChanged', 'filesD
 const emitPrompt = (key) => emit('aiPromptSelected', key)
 
 /**
- * Resize an image file if it exceeds max dimensions.
- * Returns a new File with the resized image, or the original if small enough.
+ * Resize an image file if it exceeds max upload dimensions.
+ * Preserves quality — only downsizes truly massive images (>2000px)
+ * to avoid uploading 10MB+ files. Display size is controlled in the editor.
  */
-const MAX_IMAGE_WIDTH = 800
-const MAX_IMAGE_HEIGHT = 800
+const MAX_UPLOAD_DIM = 2000
 
 const resizeImage = (file) => {
   return new Promise((resolve) => {
-    // Only resize actual image types
     if (!file.type.startsWith('image/') || file.type === 'image/gif') {
       resolve(file)
       return
@@ -402,40 +401,31 @@ const resizeImage = (file) => {
     img.onload = () => {
       URL.revokeObjectURL(url)
 
-      // No resize needed if within limits
-      if (img.width <= MAX_IMAGE_WIDTH && img.height <= MAX_IMAGE_HEIGHT) {
+      if (img.width <= MAX_UPLOAD_DIM && img.height <= MAX_UPLOAD_DIM) {
         resolve(file)
         return
       }
 
-      // Calculate new dimensions preserving aspect ratio
       let newWidth = img.width
       let newHeight = img.height
 
-      if (newWidth > MAX_IMAGE_WIDTH) {
-        newHeight = Math.round(newHeight * (MAX_IMAGE_WIDTH / newWidth))
-        newWidth = MAX_IMAGE_WIDTH
+      if (newWidth > MAX_UPLOAD_DIM) {
+        newHeight = Math.round(newHeight * (MAX_UPLOAD_DIM / newWidth))
+        newWidth = MAX_UPLOAD_DIM
       }
-      if (newHeight > MAX_IMAGE_HEIGHT) {
-        newWidth = Math.round(newWidth * (MAX_IMAGE_HEIGHT / newHeight))
-        newHeight = MAX_IMAGE_HEIGHT
+      if (newHeight > MAX_UPLOAD_DIM) {
+        newWidth = Math.round(newWidth * (MAX_UPLOAD_DIM / newHeight))
+        newHeight = MAX_UPLOAD_DIM
       }
 
       const canvas = document.createElement('canvas')
       canvas.width = newWidth
       canvas.height = newHeight
-
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(img, 0, 0, newWidth, newHeight)
+      canvas.getContext('2d').drawImage(img, 0, 0, newWidth, newHeight)
 
       canvas.toBlob((blob) => {
-        if (blob) {
-          const resized = new File([blob], file.name, { type: file.type })
-          resolve(resized)
-        } else {
-          resolve(file)
-        }
-      }, file.type, 0.85)
+        resolve(blob ? new File([blob], file.name, { type: file.type }) : file)
+      }, file.type, 0.92)
     }
 
     img.onerror = () => {
@@ -616,7 +606,7 @@ const CustomMention = Mention.extend({
   }
 })
 
-// Custom Image extension with drag-handle resizing
+// Custom Image extension with drag-handle resizing and size presets
 const ResizableImage = Image.extend({
   addAttributes() {
     return {
@@ -661,12 +651,55 @@ const ResizableImage = Image.extend({
       }
       wrapper.appendChild(img)
 
+      // Size toolbar (Small / Best fit / Original)
+      const toolbar = document.createElement('div')
+      toolbar.classList.add('image-size-toolbar')
+      const sizes = [
+        { label: 'Small', value: 200 },
+        { label: 'Best fit', value: 'fit' },
+        { label: 'Original', value: 'original' },
+      ]
+      let naturalWidth = 0
+      img.addEventListener('load', () => { naturalWidth = img.naturalWidth })
+
+      const commitWidth = (newWidth) => {
+        const pos = getPos()
+        if (typeof pos === 'number') {
+          nodeEditor.chain().focus().command(({ tr }) => {
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, width: newWidth || null })
+            return true
+          }).run()
+        }
+      }
+
+      sizes.forEach(({ label, value }) => {
+        const btn = document.createElement('button')
+        btn.textContent = label
+        btn.type = 'button'
+        btn.addEventListener('mousedown', (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          if (value === 'original') {
+            img.style.width = naturalWidth ? naturalWidth + 'px' : 'auto'
+            commitWidth(naturalWidth || null)
+          } else if (value === 'fit') {
+            img.style.width = ''
+            commitWidth(null)
+          } else {
+            img.style.width = value + 'px'
+            commitWidth(value)
+          }
+        })
+        toolbar.appendChild(btn)
+      })
+      wrapper.appendChild(toolbar)
+
       // Resize handle (bottom-right corner)
       const handle = document.createElement('div')
       handle.classList.add('image-resize-handle')
       wrapper.appendChild(handle)
 
-      // Only show handle when wrapper is selected
+      // Only show handle + toolbar when wrapper is selected
       wrapper.addEventListener('click', (e) => {
         e.stopPropagation()
         wrapper.classList.add('selected')
@@ -703,19 +736,7 @@ const ResizableImage = Image.extend({
         document.removeEventListener('mousemove', onMouseMove)
         document.removeEventListener('mouseup', onMouseUp)
         wrapper.classList.remove('resizing')
-
-        // Commit the new width to the node
-        const pos = getPos()
-        if (typeof pos === 'number') {
-          const newWidth = Math.round(img.offsetWidth)
-          nodeEditor.chain().focus().command(({ tr }) => {
-            tr.setNodeMarkup(pos, undefined, {
-              ...node.attrs,
-              width: newWidth
-            })
-            return true
-          }).run()
-        }
+        commitWidth(Math.round(img.offsetWidth))
       }
 
       handle.addEventListener('mousedown', onMouseDown)
@@ -727,6 +748,8 @@ const ResizableImage = Image.extend({
           img.src = updatedNode.attrs.src
           if (updatedNode.attrs.width) {
             img.style.width = updatedNode.attrs.width + 'px'
+          } else {
+            img.style.width = ''
           }
           return true
         },
@@ -1008,9 +1031,45 @@ defineExpose({ focus, extractMentions, editor, runCommand })
       z-index: 10;
     }
 
+    // Size toolbar
+    .image-size-toolbar {
+      display: none;
+      position: absolute;
+      bottom: -32px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: hsl(var(--background));
+      border: 1px solid hsl(var(--border));
+      border-radius: 6px;
+      padding: 2px;
+      z-index: 20;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+
+      button {
+        padding: 2px 8px;
+        font-size: 11px;
+        color: hsl(var(--muted-foreground));
+        background: none;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        line-height: 1.6;
+
+        &:hover {
+          background: hsl(var(--accent));
+          color: hsl(var(--accent-foreground));
+        }
+      }
+    }
+
     &.selected .image-resize-handle,
     &.resizing .image-resize-handle {
       display: block;
+    }
+
+    &.selected .image-size-toolbar {
+      display: flex;
     }
 
     &.selected .inline-image {
