@@ -655,7 +655,7 @@ const ResizableImage = Image.extend({
       const toolbar = document.createElement('div')
       toolbar.classList.add('image-size-toolbar')
       const sizes = [
-        { label: 'Small', value: 200 },
+        { label: 'Small', value: 400 },
         { label: 'Best fit', value: 'fit' },
         { label: 'Original', value: 'original' },
       ]
