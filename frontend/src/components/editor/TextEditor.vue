@@ -1031,20 +1031,21 @@ defineExpose({ focus, extractMentions, editor, runCommand })
       z-index: 10;
     }
 
-    // Size toolbar
+    // Size toolbar — positioned above image to avoid BubbleMenu overlap
     .image-size-toolbar {
       display: none;
       position: absolute;
-      bottom: -32px;
+      top: 4px;
       left: 50%;
       transform: translateX(-50%);
-      background: hsl(var(--background));
+      background: hsla(var(--background) / 0.95);
       border: 1px solid hsl(var(--border));
       border-radius: 6px;
       padding: 2px;
-      z-index: 20;
+      z-index: 10000;
       white-space: nowrap;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      backdrop-filter: blur(4px);
 
       button {
         padding: 2px 8px;
