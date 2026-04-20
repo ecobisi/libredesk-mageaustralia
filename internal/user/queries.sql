@@ -47,7 +47,7 @@ SELECT
     u.signature,
     array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL) AS roles,
     COALESCE(
-        (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'emoji', t.emoji))
+        (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'emoji', t.emoji, 'color', t.color))
          FROM team_members tm
          JOIN teams t ON tm.team_id = t.id
          WHERE tm.user_id = u.id),
@@ -244,7 +244,7 @@ SELECT
     u.signature,
     array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL) AS roles,
     COALESCE(
-        (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'emoji', t.emoji))
+        (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'emoji', t.emoji, 'color', t.color))
          FROM team_members tm
          JOIN teams t ON tm.team_id = t.id
          WHERE tm.user_id = u.id),
