@@ -511,7 +511,15 @@ const viewToDelete = ref(null)
                           asChild
                         >
                           <router-link :to="{ name: 'team-inbox', params: { teamID: team.id } }">
-                            {{ team.emoji }}<span>{{ team.name }}</span>
+                            <span
+                              v-if="team.color"
+                              class="flex h-5 w-5 items-center justify-center rounded text-white font-semibold text-[11px] shrink-0"
+                              :style="{ backgroundColor: team.color }"
+                            >
+                              {{ (team.name || '?').charAt(0).toUpperCase() }}
+                            </span>
+                            <template v-else>{{ team.emoji }}</template>
+                            <span>{{ team.name }}</span>
                           </router-link>
                         </SidebarMenuButton>
                       </SidebarMenuSubItem>

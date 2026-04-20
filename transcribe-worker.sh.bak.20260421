@@ -51,21 +51,10 @@ process_jobs() {
         
         echo "  Transcript: ${TRANSCRIPT:0:100}..."
         
-        # Insert as private note. psql variable substitution :'var' only
-        # works when SQL is read from stdin/file, NOT with -c — so we pipe the
-        # statement in. This safely quotes apostrophes and other SQL specials
-        # in the transcript (raw interpolation broke on "I'm").
+        # Insert as private note
         HTML_CONTENT="<p><strong>Voicemail Transcript</strong></p><p>$TRANSCRIPT</p>"
-        docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" \
-            -v "ON_ERROR_STOP=1" \
-            -v conv_uuid="$conv_uuid" \
-            -v html_content="$HTML_CONTENT" \
-            -v transcript="$TRANSCRIPT" \
-            <<'SQL' 2>&1
-INSERT INTO conversation_messages (uuid, type, status, conversation_id, content, text_content, content_type, private, sender_id, sender_type, created_at, updated_at)
-SELECT gen_random_uuid(), 'outgoing', 'sent', c.id, :'html_content', :'transcript', 'html', true, 1, 'agent', NOW(), NOW()
-FROM conversations c WHERE c.uuid = :'conv_uuid';
-SQL
+        docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c \
+            "INSERT INTO conversation_messages (uuid, type, status, conversation_id, content, text_content, content_type, private, sender_id, sender_type, created_at, updated_at) SELECT gen_random_uuid(), 'outgoing', 'sent', c.id, '$HTML_CONTENT', '$TRANSCRIPT', 'html', true, 1, 'agent', NOW(), NOW() FROM conversations c WHERE c.uuid = '$conv_uuid';" 2>&1
         
         if [ $? -eq 0 ]; then
             echo "  SUCCESS: Transcript inserted"

@@ -94,6 +94,7 @@ CREATE TABLE teams (
 	updated_at TIMESTAMPTZ DEFAULT NOW(),
 	"name" TEXT NOT NULL,
 	emoji TEXT NULL,
+	color TEXT NULL,
 	conversation_assignment_type conversation_assignment_type NOT NULL,
 	max_auto_assigned_conversations INT DEFAULT 0 NOT NULL,
 

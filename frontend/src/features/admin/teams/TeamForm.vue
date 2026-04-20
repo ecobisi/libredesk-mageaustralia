@@ -9,7 +9,48 @@
             <EmojiPicker :native="true" @select="onSelectEmoji" class="w-[300px]" />
           </div>
         </FormControl>
-        <FormDescription>Display emoji for this team.</FormDescription>
+        <FormDescription>Display emoji for this team. Leave blank to use the colored badge below.</FormDescription>
+        <FormMessage />
+      </FormItem>
+    </FormField>
+
+    <FormField name="color" v-slot="{ componentField, value }">
+      <FormItem>
+        <FormLabel>Badge color</FormLabel>
+        <FormControl>
+          <div class="flex items-center gap-3">
+            <input
+              type="color"
+              :value="value || '#6b7280'"
+              @input="(e) => form.setFieldValue('color', e.target.value)"
+              class="h-9 w-16 cursor-pointer rounded border border-input bg-background p-1"
+            />
+            <Input
+              type="text"
+              placeholder="#7c3aed"
+              v-bind="componentField"
+              class="font-mono w-32"
+            />
+            <button
+              v-if="value"
+              type="button"
+              @click="form.setFieldValue('color', '')"
+              class="text-xs text-muted-foreground hover:underline"
+            >
+              Clear
+            </button>
+            <div
+              v-if="value"
+              class="flex h-9 w-9 items-center justify-center rounded-md text-white font-semibold text-sm"
+              :style="{ backgroundColor: value }"
+            >
+              {{ (form.values.name || '?').charAt(0).toUpperCase() }}
+            </div>
+          </div>
+        </FormControl>
+        <FormDescription>
+          Optional. When set, the team shows a colored square with the first letter of the team name (instead of the emoji).
+        </FormDescription>
         <FormMessage />
       </FormItem>
     </FormField>
