@@ -299,7 +299,7 @@ const _threadInitialized = ref(false)
 const _buildThread = () => {
   if (messageType.value !== 'reply') return ''
   const msgs = conversationStore.conversationMessages
-    ?.filter(m => !m.private && (m.type === 'incoming' || m.type === 'outgoing') && m.content)
+    ?.filter(m => !m.private && (m.type === 'incoming' || m.type === 'outgoing') && m.content && !m.meta?.from_forward && !m.meta?.forwarded_to)
     ?.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     ?.slice(0, 3)
   if (!msgs || !msgs.length) return ''
@@ -522,7 +522,7 @@ function handleForwardMessage(messageData) {
   const fwdTime = new Date(messageData.created_at).getTime()
   const conv = conversationStore.current
   const priorMsgs = conversationStore.conversationMessages
-    ?.filter(m => !m.private && (m.type === 'incoming' || m.type === 'outgoing') && m.content)
+    ?.filter(m => !m.private && (m.type === 'incoming' || m.type === 'outgoing') && m.content && !m.meta?.from_forward && !m.meta?.forwarded_to)
     ?.filter(m => new Date(m.created_at).getTime() < fwdTime)
     ?.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     ?.slice(0, 5)

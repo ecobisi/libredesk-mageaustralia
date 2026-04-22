@@ -951,6 +951,31 @@ func (m *Manager) processIncomingMessage(in models.IncomingMessage) error {
 	// Sanitize HTML content from email clients (remove excessive whitespace, empty divs, multiple <br> tags).
 	in.Message.Content = stringutil.SanitizeEmailHTML(in.Message.Content)
 
+	// If this incoming message is a reply to a previously-forwarded email
+	// (or chained off such a reply), tag it `meta.from_forward = true`. The
+	// frontend filters tagged messages out of the auto-built quoted thread
+	// when an agent replies to the customer, so internal back-and-forth with
+	// a forwarded recipient never leaks into a customer-facing email.
+	if in.Message.InReplyTo != "" || len(in.Message.References) > 0 {
+		sourceIDs := append([]string{in.Message.InReplyTo}, in.Message.References...)
+		var isFromFwd bool
+		if err := m.q.IsSourceIDFromForward.Get(&isFromFwd, pq.Array(sourceIDs)); err != nil {
+			m.lo.Warn("failed to check from-forward provenance, leaving message untagged", "error", err)
+		} else if isFromFwd {
+			var meta map[string]any
+			if len(in.Message.Meta) > 0 {
+				_ = json.Unmarshal(in.Message.Meta, &meta)
+			}
+			if meta == nil {
+				meta = map[string]any{}
+			}
+			meta["from_forward"] = true
+			if metaBytes, jerr := json.Marshal(meta); jerr == nil {
+				in.Message.Meta = metaBytes
+			}
+		}
+	}
+
 	// Insert message.
 	if err = m.InsertMessage(&in.Message); err != nil {
 		return err

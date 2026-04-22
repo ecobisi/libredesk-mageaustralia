@@ -1,0 +1,511 @@
+import { defineComponent as q, reactive as F, unref as b, openBlock as E, createElementBlock as H, normalizeClass as I, createElementVNode as B, createCommentVNode as U } from "vue";
+const j = {
+  a: ["class", "href", "id", "style", "target"],
+  address: ["class", "id", "style"],
+  b: ["class", "id", "style"],
+  blockquote: ["class", "id", "style"],
+  br: ["class", "id", "style"],
+  caption: ["class", "id", "style"],
+  cite: ["class", "id", "style"],
+  code: ["class", "id", "style"],
+  col: [
+    "align",
+    "bgcolor",
+    "char",
+    "charoff",
+    "class",
+    "id",
+    "style",
+    "valign",
+    "width"
+  ],
+  colgroup: [
+    "align",
+    "bgcolor",
+    "char",
+    "charoff",
+    "class",
+    "id",
+    "style",
+    "valign",
+    "width"
+  ],
+  center: ["class", "id", "style"],
+  dd: ["class", "id", "style"],
+  div: ["align", "class", "dir", "id", "style"],
+  dt: ["class", "id", "style"],
+  em: ["class", "id", "style"],
+  font: ["class", "color", "face", "id", "size", "style"],
+  h1: ["align", "class", "dir", "id", "style"],
+  h2: ["align", "class", "dir", "id", "style"],
+  h3: ["align", "class", "dir", "id", "style"],
+  h4: ["align", "class", "dir", "id", "style"],
+  h5: ["align", "class", "dir", "id", "style"],
+  h6: ["align", "class", "dir", "id", "style"],
+  hr: ["align", "size", "width"],
+  i: ["class", "id", "style"],
+  img: [
+    "align",
+    "alt",
+    "border",
+    "class",
+    "height",
+    "hspace",
+    "id",
+    "src",
+    "style",
+    "usemap",
+    "vspace",
+    "width"
+  ],
+  label: ["class", "id", "style"],
+  legend: ["class", "id", "style"],
+  li: ["class", "dir", "id", "style", "type"],
+  ol: ["class", "dir", "id", "style", "type", "start", "reversed"],
+  p: ["align", "class", "dir", "id", "style"],
+  pre: ["class", "id", "style"],
+  span: ["class", "id", "style"],
+  strong: ["class", "id", "style"],
+  style: [],
+  sub: ["class", "id", "style"],
+  sup: ["class", "id", "style"],
+  table: [
+    "align",
+    "bgcolor",
+    "border",
+    "cellpadding",
+    "cellspacing",
+    "class",
+    "dir",
+    "frame",
+    "id",
+    "rules",
+    "style",
+    "width"
+  ],
+  tbody: ["class", "id", "style"],
+  td: [
+    "abbr",
+    "align",
+    "bgcolor",
+    "class",
+    "colspan",
+    "dir",
+    "height",
+    "id",
+    "lang",
+    "rowspan",
+    "scope",
+    "style",
+    "valign",
+    "width"
+  ],
+  tfoot: [
+    "align",
+    "bgcolor",
+    "char",
+    "charoff",
+    "class",
+    "id",
+    "style",
+    "valign"
+  ],
+  th: [
+    "abbr",
+    "align",
+    "bgcolor",
+    "class",
+    "colspan",
+    "dir",
+    "height",
+    "id",
+    "lang",
+    "rowspan",
+    "scope",
+    "style",
+    "valign",
+    "width"
+  ],
+  thead: [
+    "align",
+    "bgcolol",
+    "char",
+    "charoff",
+    "class",
+    "id",
+    "style",
+    "valign"
+  ],
+  tr: [
+    "align",
+    "bgcolor",
+    "char",
+    "charoff",
+    "class",
+    "dir",
+    "id",
+    "style",
+    "valign"
+  ],
+  u: ["class", "id", "style"],
+  ul: ["class", "dir", "id", "style"]
+}, V = [
+  "script",
+  "iframe",
+  "textarea",
+  "title",
+  "noscript",
+  "noembed",
+  "svg"
+], D = [
+  "azimuth",
+  "background",
+  "background-blend-mode",
+  "background-clip",
+  "background-color",
+  "background-image",
+  "background-origin",
+  "background-position",
+  "background-position-x",
+  "background-position-y",
+  "background-repeat",
+  "background-repeat-x",
+  "background-repeat-y",
+  "background-size",
+  "border",
+  "border-bottom",
+  "border-bottom-color",
+  "border-bottom-left-radius",
+  "border-bottom-right-radius",
+  "border-bottom-style",
+  "border-bottom-width",
+  "border-collapse",
+  "border-color",
+  "border-left",
+  "border-left-color",
+  "border-left-style",
+  "border-left-width",
+  "border-radius",
+  "border-right",
+  "border-right-color",
+  "border-right-style",
+  "border-right-width",
+  "border-spacing",
+  "border-style",
+  "border-top",
+  "border-top-color",
+  "border-top-left-radius",
+  "border-top-right-radius",
+  "border-top-style",
+  "border-top-width",
+  "border-width",
+  "box-sizing",
+  "break-after",
+  "break-before",
+  "break-inside",
+  "caption-side",
+  "clear",
+  "color",
+  "column-count",
+  "column-fill",
+  "column-gap",
+  "column-rule",
+  "column-rule-color",
+  "column-rule-style",
+  "column-rule-width",
+  "column-span",
+  "column-width",
+  "columns",
+  "direction",
+  "display",
+  "elevation",
+  "empty-cells",
+  "float",
+  "font",
+  "font-family",
+  "font-feature-settings",
+  "font-kerning",
+  "font-size",
+  "font-size-adjust",
+  "font-stretch",
+  "font-style",
+  "font-synthesis",
+  "font-variant",
+  "font-variant-alternates",
+  "font-variant-caps",
+  "font-variant-east-asian",
+  "font-variant-ligatures",
+  "font-variant-numeric",
+  "font-weight",
+  "height",
+  "image-orientation",
+  "image-resolution",
+  "ime-mode",
+  "isolation",
+  "layout-flow",
+  "layout-grid",
+  "layout-grid-char",
+  "layout-grid-char-spacing",
+  "layout-grid-line",
+  "layout-grid-mode",
+  "layout-grid-type",
+  "letter-spacing",
+  "line-break",
+  "line-height",
+  "list-style",
+  "list-style-position",
+  "list-style-type",
+  "margin",
+  "margin-bottom",
+  "margin-left",
+  "margin-right",
+  "margin-top",
+  "marker-offset",
+  "max-height",
+  "max-width",
+  "min-height",
+  "min-width",
+  "mix-blend-mode",
+  "object-fit",
+  "object-position",
+  "opacity",
+  "outline",
+  "outline-color",
+  "outline-style",
+  "outline-width",
+  "overflow",
+  "overflow-x",
+  "overflow-y",
+  "padding",
+  "padding-bottom",
+  "padding-left",
+  "padding-right",
+  "padding-top",
+  "page-break-after",
+  "page-break-before",
+  "page-break-inside",
+  "pause",
+  "pause-after",
+  "pause-before",
+  "pitch",
+  "pitch-range",
+  "quotes",
+  "richness",
+  "speak",
+  "speak-header",
+  "speak-numeral",
+  "speak-punctuation",
+  "speech-rate",
+  "stress",
+  "table-layout",
+  "text-align",
+  "text-align-last",
+  "text-autospace",
+  "text-combine-upright",
+  "text-decoration",
+  "text-decoration-color",
+  "text-decoration-line",
+  "text-decoration-skip",
+  "text-decoration-style",
+  "text-emphasis",
+  "text-emphasis-color",
+  "text-emphasis-style",
+  "text-indent",
+  "text-justify",
+  "text-kashida-space",
+  "text-orientation",
+  "text-overflow",
+  "text-transform",
+  "text-underline-position",
+  "unicode-bidi",
+  "vertical-align",
+  "voice-family",
+  "white-space",
+  "width",
+  "word-break",
+  "word-spacing",
+  "word-wrap",
+  "writing-mode",
+  "zoom"
+];
+function W(t, o) {
+  return o ? t.split(",").map((l) => l.trim()).map((l) => {
+    const s = l.replace(/\./g, "." + o + "_").replace(/#/g, "#" + o + "_");
+    return s.toLowerCase().startsWith("body") ? "#" + o + " " + s.substring(4) : "#" + o + " " + s;
+  }).join(",") : t;
+}
+function Y(t, o, l) {
+  return t.trim().replace(/expression\((.*?)\)/g, "").replace(/url\(["']?(.*?)["']?\)/g, (s, n) => l ? `url("${encodeURI(l(decodeURI(n)))}")` : o.includes(n.toLowerCase().split(":")[0]) ? s : "");
+}
+function O(t, o, l, s) {
+  if (!t)
+    return;
+  const n = [];
+  for (let i = 0; i < t.length; i++) {
+    const u = t[i];
+    n.push(u);
+  }
+  for (const i of n)
+    if (D.includes(i)) {
+      const u = t.getPropertyValue(i);
+      t.setProperty(i, Y(u, o, s), l ? t.getPropertyPriority(i) : void 0);
+    } else
+      t.removeProperty(i);
+}
+function S(t, o, l, s, n) {
+  t.selectorText = W(t.selectorText, o), O(t.style, l, s, n);
+}
+const P = ["http", "https", "mailto"];
+function $(t, { dropAllHtmlTags: o = !1, rewriteExternalLinks: l, rewriteExternalResources: s, id: n = "msg_" + String.fromCharCode(...new Array(24).fill(void 0).map(() => Math.random() * 25 % 25 + 65)), allowedSchemas: i = P, preserveCssPriority: u = !0, noWrapper: m = !1 }) {
+  var N, A, _, z, R;
+  m && (n = "");
+  const a = new DOMParser().parseFromString(t, "text/html");
+  i = Array.isArray(i) ? i.map((e) => e.toLowerCase()) : P;
+  const v = a.createNodeIterator(a.documentElement, NodeFilter.SHOW_COMMENT);
+  let c;
+  for (; c = v.nextNode(); )
+    (N = c.parentNode) == null || N.removeChild(c);
+  const w = [...V];
+  o && w.push("style"), a.querySelectorAll(w.join(", ")).forEach((e) => e.remove()), a.querySelectorAll("head > style").forEach((e) => {
+    a.body.appendChild(e);
+  });
+  const C = [], T = a.createNodeIterator(a.body, NodeFilter.SHOW_ELEMENT, {
+    acceptNode: () => NodeFilter.FILTER_ACCEPT
+  });
+  for (; c = T.nextNode(); ) {
+    const e = c, p = e.tagName.toLowerCase();
+    if (!(p === "body" || p === "html")) {
+      if (o) {
+        if (c.textContent) {
+          const g = a.createTextNode(c.textContent);
+          (A = c.parentNode) == null || A.replaceChild(g, c);
+        } else
+          (_ = c.parentNode) == null || _.removeChild(c);
+        continue;
+      }
+      if (p in j) {
+        const g = j[p];
+        for (const r of e.getAttributeNames())
+          if (!g.includes(r))
+            e.removeAttribute(r);
+          else if (r === "class" && !m)
+            e.setAttribute(r, ((z = e.getAttribute(r)) == null ? void 0 : z.split(" ").map((d) => n + "_" + d).join(" ")) ?? "");
+          else if (r === "id" && !m)
+            e.setAttribute(r, n + "_" + (e.getAttribute(r) ?? ""));
+          else if (r === "href" || r === "src") {
+            const d = e.getAttribute(r) ?? "";
+            r === "href" && l ? e.setAttribute(r, l(d)) : r === "src" && s ? e.setAttribute(r, s(d)) : i.includes(d.toLowerCase().split(":")[0]) || e.removeAttribute(r);
+          }
+        O(e.style, i, u, s), p === "a" && (e.setAttribute("rel", "noopener noreferrer"), e.setAttribute("target", "_blank"));
+      } else
+        e.insertAdjacentHTML("afterend", e.innerHTML), C.push(e);
+    }
+  }
+  for (const e of C)
+    try {
+      try {
+        (R = e.parentNode) == null || R.removeChild(e);
+      } catch {
+        e.outerHTML = "";
+      }
+    } catch {
+      try {
+        e.remove();
+      } catch {
+      }
+    }
+  if (a.querySelectorAll("body style").forEach((e) => {
+    const p = e, g = p.sheet, r = [];
+    if (!g.cssRules) {
+      p.textContent = "";
+      return;
+    }
+    for (let d = 0; d < g.cssRules.length; d++) {
+      const h = g.cssRules[d];
+      if ("selectorText" in h)
+        S(h, n, i, u, s), r.push(h);
+      else if ("cssRules" in h && "media" in h) {
+        const f = h, M = [];
+        for (let y = 0; y < f.cssRules.length; y++) {
+          const x = f.cssRules[y];
+          x.type === x.STYLE_RULE && (S(x, n, i, u, s), M.push(x));
+        }
+        for (; f.cssRules.length > 0; )
+          f.deleteRule(0);
+        for (const y of M)
+          f.insertRule(y.cssText, f.cssRules.length);
+        r.push(f);
+      }
+    }
+    p.textContent = r.map((d) => d.cssText).join(`
+`);
+  }), m)
+    return a.body.innerHTML;
+  {
+    const e = a.createElement("div");
+    return e.id = n, e.innerHTML = a.body.innerHTML, e.outerHTML;
+  }
+}
+function G(t) {
+  const o = document.createElement("div");
+  return o.textContent = t, o.innerHTML;
+}
+function J(t, o, l) {
+  let s = t ?? "";
+  return (s == null ? void 0 : s.length) === 0 && o && (s = G(o).split(`
+`).map((n) => "<p>" + n + "</p>").join(`
+`)), $(s, l ?? {});
+}
+const K = ["innerHTML"], Q = ["title"], X = /* @__PURE__ */ q({
+  __name: "Letter",
+  props: {
+    className: {},
+    html: {},
+    text: {},
+    useIframe: { type: Boolean },
+    iframeTitle: {},
+    rewriteExternalLinks: {},
+    rewriteExternalResources: {},
+    allowedSchemas: {},
+    preserveCssPriority: { type: Boolean }
+  },
+  setup(t) {
+    const o = t, {
+      className: l,
+      html: s,
+      text: n,
+      useIframe: i,
+      iframeTitle: u,
+      rewriteExternalLinks: m,
+      rewriteExternalResources: a,
+      allowedSchemas: v,
+      preserveCssPriority: c
+    } = F(o), k = J(s, n, {
+      rewriteExternalResources: a,
+      rewriteExternalLinks: m,
+      allowedSchemas: v,
+      preserveCssPriority: c
+    }), L = "data:text/html;charset=utf-8," + encodeURIComponent(k);
+    return (C, T) => b(i) ? b(i) ? (E(), H("div", {
+      key: 1,
+      class: I([b(l)])
+    }, [
+      B("iframe", {
+        src: L,
+        title: b(u)
+      }, null, 8, Q)
+    ], 2)) : U("", !0) : (E(), H("div", {
+      key: 0,
+      class: I([b(l)]),
+      innerHTML: b(k)
+    }, null, 10, K));
+  }
+}), te = {
+  install: (t) => {
+    t.component("Letter", X);
+  }
+};
+export {
+  X as Letter,
+  te as default
+};

@@ -839,3 +839,15 @@ WHERE uuid = $1 AND private = true AND type = 'outgoing';
 UPDATE conversation_messages
 SET content = $2, text_content = $3, meta = jsonb_set(COALESCE(meta, '{}')::jsonb, '{deleted}', 'true')::json, updated_at = NOW()
 WHERE uuid = $1 AND private = true AND type = 'outgoing';
+
+-- name: is-source-id-from-forward
+-- Returns true if any of the given message source IDs (from In-Reply-To /
+-- References headers) belongs to a message that was either sent as a forward
+-- (meta.forwarded_to set) or is itself flagged as a reply-to-forward
+-- (meta.from_forward = true). Used to propagate the from_forward tag through
+-- chained replies so internal threads stay internal.
+SELECT EXISTS(
+    SELECT 1 FROM conversation_messages
+    WHERE source_id = ANY($1::text[])
+      AND (meta ? 'forwarded_to' OR (meta->>'from_forward')::boolean = true)
+) AS is_from_forward;

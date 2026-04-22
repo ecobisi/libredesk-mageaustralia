@@ -198,6 +198,18 @@
       </span>
     </div>
 
+    <!-- Reply landed via the forwarded thread, internal-only — never auto-quoted to the customer. -->
+    <div
+      v-if="isFromForward"
+      class="flex items-center gap-1 mt-1"
+      :class="isOutgoing ? 'pr-[47px] justify-end' : 'pl-[47px]'"
+    >
+      <span class="text-xs text-muted-foreground/70 italic flex items-center gap-1">
+        <Forward class="w-3 h-3" />
+        Reply to forward (internal)
+      </span>
+    </div>
+
   </div>
 
   <!-- Inline image lightbox -->
@@ -471,6 +483,12 @@ const forwardedTo = computed(() => {
   if (Array.isArray(fwdTo)) return fwdTo.join(', ')
   return null
 })
+
+// True when this incoming message is a reply (or chained reply) to a
+// previously-forwarded email. Tagged server-side at IMAP intake; the reply
+// box's auto-thread builder filters these out so internal back-and-forth
+// with a forward recipient never leaks into a customer-facing email.
+const isFromForward = computed(() => Boolean(props.message.meta?.from_forward))
 
 const forwardMessage = () => {
   emitter.emit('forward-message', props.message)
