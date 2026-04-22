@@ -17,3 +17,4 @@ backups/
 fix_contacts.py
 transcribe.sh
 firebase-service-account.json
+frontend/.pnpm-store/
