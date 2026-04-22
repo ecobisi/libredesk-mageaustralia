@@ -18,7 +18,7 @@ import (
 	"github.com/abhinavxd/libredesk/internal/conversation/models"
 	"github.com/abhinavxd/libredesk/internal/envelope"
 	"github.com/abhinavxd/libredesk/internal/image"
-	"github.com/abhinavxd/libredesk/internal/inbox"
+	inboxpkg "github.com/abhinavxd/libredesk/internal/inbox"
 	mmodels "github.com/abhinavxd/libredesk/internal/media/models"
 	"github.com/abhinavxd/libredesk/internal/sla"
 	"github.com/abhinavxd/libredesk/internal/stringutil"
@@ -188,6 +188,16 @@ func (m *Manager) sendOutgoingMessage(message models.Message) {
 		return
 	}
 
+	// Embed inline images as multipart/related CID parts so the email is
+	// self-contained — recipients see images even if our /uploads/ signed
+	// URLs later expire (default ~1h) or our server moves. Email channels only.
+	if inbox.Channel() == inboxpkg.ChannelEmail {
+		if err := m.embedInlineImagesAsCID(&message); err != nil {
+			m.lo.Error("error embedding inline images as cid", "error", err, "message_id", message.ID)
+			// Non-fatal: send anyway with whatever URLs we have.
+		}
+	}
+
 	// Set from address with agent name + inbox email
 	sender, err := m.userStore.GetAgent(message.SenderID, "")
 	if err == nil && sender.FirstName != "" {
@@ -287,7 +297,7 @@ func (m *Manager) sendOutgoingMessage(message models.Message) {
 // RenderMessageInTemplate renders message content in template.
 func (m *Manager) RenderMessageInTemplate(channel string, message *models.Message) error {
 	switch channel {
-	case inbox.ChannelEmail:
+	case inboxpkg.ChannelEmail:
 		conversation, err := m.GetConversation(0, message.ConversationUUID, "")
 		if err != nil {
 			m.lo.Error("error fetching conversation", "uuid", message.ConversationUUID, "error", err)
@@ -1378,4 +1388,126 @@ func (m *Manager) getLatestMessage(conversationID int, typ []string, status []st
 func isSpamMailbox(mailbox string) bool {
 	lower := strings.ToLower(mailbox)
 	return strings.Contains(lower, "spam") || strings.Contains(lower, "junk")
+}
+
+
+// imgSrcUploadsPattern matches an <img> tag whose src attribute points at
+// our /uploads/<uuid> path. Restricting to the src attribute (rather than
+// free text) prevents accidental rewrites of plain prose like "see /uploads/..."
+// or quoted-thread URL mentions outside of an <img>.
+//
+// Capture groups:
+//
+//	1: tag prefix up to and including the opening quote (`<img ... src="`)
+//	2: the entire src URL value
+//	3: media UUID
+//	4: the closing quote of the src attribute
+var imgSrcUploadsPattern = regexp.MustCompile(
+	`(?i)(<img[^>]*?\bsrc=["\'])((?:https?://[^"\'<>\s/]+)?/uploads/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\?[^"\'<>\s]*)?)(["\'])`,
+)
+
+// embedInlineImagesAsCID finds every <img src=".../uploads/<uuid>"> reference
+// in the outgoing message body, attaches the underlying file as an inline CID
+// part, and rewrites the src to "cid:ld-<uuid>". The result is a self-contained
+// email: recipients see images regardless of whether our media URLs later
+// expire or our server moves. Quoted-thread images from prior replies are
+// picked up automatically (they live in m.Content as /uploads/ URLs).
+//
+// Authorisation: refuses to embed media attached to a different conversation,
+// to prevent an agent in conv B crafting <img src="/uploads/<conv-A-uuid>">
+// and exfiltrating conv A's image. Orphan media (model_id NULL) are allowed
+// since they're typically just-uploaded by the current agent for this reply.
+func (m *Manager) embedInlineImagesAsCID(message *models.Message) error {
+	matches := imgSrcUploadsPattern.FindAllStringSubmatch(message.Content, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	cidByUUID := map[string]string{}
+
+	// Re-use any inline image already on the message (uploaded via the reply
+	// box) instead of fetching twice. Anything already attached is authorised.
+	for i := range message.Attachments {
+		att := &message.Attachments[i]
+		if att.UUID == "" || !strings.HasPrefix(strings.ToLower(att.ContentType), "image/") {
+			continue
+		}
+		cid := "ld-" + att.UUID
+		att.ContentID = cid
+		// Force inline disposition so smtppool emits as multipart/related.
+		att.Header = attachment.MakeHeader(att.ContentType, cid, att.Name, "base64", "inline")
+		cidByUUID[att.UUID] = cid
+	}
+
+	// For URLs pointing to media not yet on this message (commonly quoted
+	// thread images from prior replies), fetch + authorise + attach.
+	for _, sub := range matches {
+		uuid := sub[3]
+		if _, ok := cidByUUID[uuid]; ok {
+			continue
+		}
+		media, err := m.mediaStore.Get(0, uuid)
+		if err != nil {
+			m.lo.Debug("inline-image media not found, leaving URL unrewritten", "uuid", uuid, "error", err)
+			continue
+		}
+
+		// Cross-conversation guard: if media is linked to a message, that
+		// message must belong to this conversation. Orphans (NULL model_id)
+		// are allowed — they cannot be used to exfiltrate from elsewhere.
+		if media.Model.String == mmodels.ModelMessages && media.ModelID.Valid {
+			linkedConv, err := m.GetConversationByMessageID(media.ModelID.Int)
+			if err != nil {
+				m.lo.Warn("refusing to embed media: linked conversation lookup failed", "uuid", uuid, "linked_message_id", media.ModelID.Int, "error", err)
+				continue
+			}
+			if linkedConv.ID != message.ConversationID {
+				m.lo.Warn("refusing to embed media from a different conversation", "uuid", uuid, "linked_conversation_id", linkedConv.ID, "outgoing_conversation_id", message.ConversationID)
+				continue
+			}
+		}
+
+		if !strings.HasPrefix(strings.ToLower(media.ContentType), "image/") {
+			continue
+		}
+		blob, err := m.mediaStore.GetBlob(media.UUID)
+		if err != nil {
+			m.lo.Warn("inline-image blob fetch failed, leaving URL unrewritten", "uuid", uuid, "error", err)
+			continue
+		}
+		cid := "ld-" + media.UUID
+		message.Attachments = append(message.Attachments, attachment.Attachment{
+			Name:        media.Filename,
+			UUID:        media.UUID,
+			ContentType: media.ContentType,
+			Content:     blob,
+			Size:        media.Size,
+			ContentID:   cid,
+			Header:      attachment.MakeHeader(media.ContentType, cid, media.Filename, "base64", "inline"),
+		})
+		cidByUUID[uuid] = cid
+	}
+
+	if len(cidByUUID) == 0 {
+		return nil
+	}
+
+	// Rewrite each matched img src to its corresponding cid: ref. Anything
+	// not in cidByUUID gets its src stripped to "" so the recipient sees a
+	// broken-image placeholder rather than an external HTTP request to our
+	// server (which could leak a UUID, burn signed-URL TTL, or act as a
+	// tracking pixel).
+	message.Content = imgSrcUploadsPattern.ReplaceAllStringFunc(message.Content, func(match string) string {
+		sub := imgSrcUploadsPattern.FindStringSubmatch(match)
+		if len(sub) < 5 {
+			return match
+		}
+		newSrc := ""
+		if cid, ok := cidByUUID[sub[3]]; ok {
+			newSrc = "cid:" + cid
+		}
+		return sub[1] + newSrc + sub[4]
+	})
+
+	return nil
 }
