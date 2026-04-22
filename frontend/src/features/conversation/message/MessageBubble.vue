@@ -441,12 +441,20 @@ const redactPCI = async () => {
   }
 }
 
+// Forward-related: outgoing forward (meta.forwarded_to) OR incoming reply
+// to a forward (meta.from_forward, tagged at IMAP intake). Both share the
+// private-note bubble color so the internal forward thread visually groups
+// distinct from customer-facing messages.
+const isForwardRelated = computed(
+  () => Boolean(props.message.meta?.forwarded_to) || Boolean(props.message.meta?.from_forward)
+)
+
 const bubbleClasses = computed(() => ({
   // Outgoing-specific: private message styling
-  'bg-private': isOutgoing.value && props.message.private,
-  'border border-border': isOutgoing.value && !props.message.private,
-  'bg-agent-bubble': isOutgoing.value && !props.message.private,
-  'bg-customer-bubble': !isOutgoing.value,
+  'bg-private': (isOutgoing.value && props.message.private) || isForwardRelated.value,
+  'border border-border': isOutgoing.value && !props.message.private && !isForwardRelated.value,
+  'bg-agent-bubble': isOutgoing.value && !props.message.private && !isForwardRelated.value,
+  'bg-customer-bubble': !isOutgoing.value && !isForwardRelated.value,
   'opacity-50 animate-pulse': isOutgoing.value && props.message.status === 'pending',
   'border-red-400': isOutgoing.value && props.message.status === 'failed',
   relative: isOutgoing.value,
