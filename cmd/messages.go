@@ -320,8 +320,9 @@ func handleSendMessage(r *fastglue.Request) error {
 		meta["forwarded"] = true
 		meta["forwarded_to"] = req.ForwardedTo
 		sendTo = req.ForwardedTo
-		sendCC = nil
-		sendBCC = nil
+		// CC/BCC pass through unchanged — agents sometimes want to loop
+		// internal teammates in on a forward; stripping was silently
+		// dropping their chosen recipients.
 	}
 
 	// Queue reply.
