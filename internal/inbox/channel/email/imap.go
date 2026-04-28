@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/mail"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -849,6 +850,9 @@ func isAutoReply(envelope *enmime.Envelope) bool {
 		return false
 	}
 	if as := strings.ToLower(strings.TrimSpace(envelope.GetHeader("Auto-Submitted"))); as != "" && as != "no" {
+		// TEMP-DIAG
+		fmt.Fprintf(os.Stderr, "[AUTO-REPLY-DIAG] Auto-Submitted hit. Subject=%q Content-Type=%q From=%q\n",
+			envelope.GetHeader("Subject"), envelope.GetHeader("Content-Type"), envelope.GetHeader("From"))
 		return true
 	}
 	if strings.TrimSpace(envelope.GetHeader("X-Autoreply")) != "" {
