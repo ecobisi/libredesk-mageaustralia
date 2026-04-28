@@ -268,6 +268,14 @@ func (e *Email) fetchAndProcessMessages(ctx context.Context, client *imapclient.
 				}
 				if isAutoReply(envelope) {
 					autoReply = true
+					// TEMP-DSN-DIAG: log when we mark a bounce-shaped subject as auto-reply
+					// so we can see why isDSN missed it. Remove once verified.
+					if strings.Contains(strings.ToLower(envelope.GetHeader("Subject")), "delivery status") {
+						e.lo.Warn("DSN-shaped subject classified as auto-reply",
+							"subject", envelope.GetHeader("Subject"),
+							"content_type", envelope.GetHeader("Content-Type"),
+							"auto_submitted", envelope.GetHeader("Auto-Submitted"))
+					}
 				}
 				if isLoopMessage(envelope, inboxEmail) {
 					isLoop = true
@@ -849,14 +857,17 @@ func isAutoReply(envelope *enmime.Envelope) bool {
 	return false
 }
 
-// isDSN reports whether the envelope is an RFC 3464 multipart/report
-// delivery status notification (a bounce).
+// isDSN reports whether the envelope is an RFC 6522 multipart/report
+// (DSN bounce, MDN read receipt, or ARF feedback report). The report-type
+// parameter may be absent from the Content-Type header on some MTAs, so we
+// accept any multipart/report — these are all auto-generated diagnostic
+// messages an agent should see, not auto-replies to filter out.
 func isDSN(envelope *enmime.Envelope) bool {
 	if envelope == nil {
 		return false
 	}
 	ct := strings.ToLower(envelope.GetHeader("Content-Type"))
-	return strings.Contains(ct, "multipart/report") && strings.Contains(ct, "delivery-status")
+	return strings.Contains(ct, "multipart/report")
 }
 
 // isLoopMessage returns true if the email is a loop prevention message. i.e., it has the `X-Libredesk-Loop-Prevention` header with the inbox email address.
