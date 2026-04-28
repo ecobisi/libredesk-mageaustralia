@@ -22,7 +22,7 @@ import (
 // messageDedupMap prevents duplicate message submissions within a short window.
 var messageDedupMap sync.Map
 
-const messageDedupTTL = 10 * time.Second
+const messageDedupTTL = 60 * time.Second
 
 // checkMessageDedup returns true if this message was already sent recently (duplicate).
 func checkMessageDedup(userID int, convUUID, content string) bool {

@@ -339,7 +339,8 @@ const sendMessage = (uuid, data) =>
   http.post(`/api/v1/conversations/${uuid}/messages`, data, {
     headers: {
       'Content-Type': 'application/json'
-    }
+    },
+    timeout: 30000
   })
 const getConversation = (uuid) => http.get(`/api/v1/conversations/${uuid}`)
 const getConversationParticipants = (uuid) => http.get(`/api/v1/conversations/${uuid}/participants`)
@@ -392,7 +393,8 @@ const uploadMedia = (data) =>
   http.post('/api/v1/media', data, {
     headers: {
       'Content-Type': 'multipart/form-data'
-    }
+    },
+    timeout: 60000
   })
 const getOverviewCounts = () => http.get('/api/v1/reports/overview/counts')
 const getOverviewCharts = (params) => http.get('/api/v1/reports/overview/charts', { params })
