@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/mail"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -196,6 +195,7 @@ func (e *Email) fetchAndProcessMessages(ctx context.Context, client *imapclient.
 					headerAutoreply,
 					headerLibredeskLoopPrevention,
 					headerMessageID,
+					"Content-Type", // needed by isDSN to exempt bounces from the auto-reply filter
 				},
 			},
 		},
@@ -269,14 +269,6 @@ func (e *Email) fetchAndProcessMessages(ctx context.Context, client *imapclient.
 				}
 				if isAutoReply(envelope) {
 					autoReply = true
-					// TEMP-DSN-DIAG: log when we mark a bounce-shaped subject as auto-reply
-					// so we can see why isDSN missed it. Remove once verified.
-					if strings.Contains(strings.ToLower(envelope.GetHeader("Subject")), "delivery status") {
-						e.lo.Warn("DSN-shaped subject classified as auto-reply",
-							"subject", envelope.GetHeader("Subject"),
-							"content_type", envelope.GetHeader("Content-Type"),
-							"auto_submitted", envelope.GetHeader("Auto-Submitted"))
-					}
 				}
 				if isLoopMessage(envelope, inboxEmail) {
 					isLoop = true
@@ -850,9 +842,6 @@ func isAutoReply(envelope *enmime.Envelope) bool {
 		return false
 	}
 	if as := strings.ToLower(strings.TrimSpace(envelope.GetHeader("Auto-Submitted"))); as != "" && as != "no" {
-		// TEMP-DIAG
-		fmt.Fprintf(os.Stderr, "[AUTO-REPLY-DIAG] Auto-Submitted hit. Subject=%q Content-Type=%q From=%q\n",
-			envelope.GetHeader("Subject"), envelope.GetHeader("Content-Type"), envelope.GetHeader("From"))
 		return true
 	}
 	if strings.TrimSpace(envelope.GetHeader("X-Autoreply")) != "" {
