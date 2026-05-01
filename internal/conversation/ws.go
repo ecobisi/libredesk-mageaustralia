@@ -154,10 +154,15 @@ func (m *Manager) notifyParticipants(message *cmodels.Message) {
 					"UUID":            conv.UUID,
 				},
 				"Recipient": map[string]any{
-					"FirstName": agent.FirstName,
-					"LastName":  agent.LastName,
-					"FullName":  agent.FirstName + " " + agent.LastName,
-					"Email":     agent.Email.String,
+					"FirstName":  agent.FirstName,
+					"LastName":   agent.LastName,
+					"FullName":   agent.FirstName + " " + agent.LastName,
+					"Email":      agent.Email.String,
+					// IsAssignee lets the email template show a different subject/body
+					// for the ticket owner vs a watcher. Mirrors Freshdesk’s
+					// distinction between owner notifications and "you are watching"
+					// activity emails.
+					"IsAssignee": userID == conv.AssignedUserID.Int,
 				},
 				"Author": map[string]any{
 					"FirstName": senderFirstName,
