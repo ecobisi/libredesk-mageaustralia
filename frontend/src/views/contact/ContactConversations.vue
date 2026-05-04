@@ -1,11 +1,8 @@
 <template>
   <div>
-    <h3 class="text-base font-semibold mb-3">
-      {{ $t('conversation.sidebar.previousConvo') }}
-      <span v-if="conversations.length" class="text-xs text-muted-foreground font-normal ml-1">
-        ({{ conversations.length }})
-      </span>
-    </h3>
+    <div v-if="conversations.length" class="text-xs text-muted-foreground mb-3">
+      {{ conversations.length }} {{ conversations.length === 1 ? 'conversation' : 'conversations' }}
+    </div>
     <div v-if="loading" class="text-center text-sm text-muted-foreground py-4">
       <Spinner />
     </div>

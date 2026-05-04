@@ -55,8 +55,30 @@
 
           <div class="mt-12 space-y-10">
             <ContactForm :formLoading="formLoading" :onSubmit="onSubmit" />
-            <ContactNotes :contactId="contact.id" v-if="userStore.can('contact_notes:read')" />
-            <ContactConversations :contactId="contact.id" />
+            <Tabs default-value="conversations">
+              <TabsList class="bg-muted p-1 rounded">
+                <TabsTrigger value="conversations" class="px-3 py-1 rounded">
+                  {{ $t('conversation.sidebar.previousConvo') }}
+                </TabsTrigger>
+                <TabsTrigger
+                  v-if="userStore.can('contact_notes:read')"
+                  value="notes"
+                  class="px-3 py-1 rounded"
+                >
+                  {{ $t('globals.terms.notes', 'Notes') }}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="conversations" class="mt-4">
+                <ContactConversations :contactId="contact.id" />
+              </TabsContent>
+              <TabsContent
+                v-if="userStore.can('contact_notes:read')"
+                value="notes"
+                class="mt-4"
+              >
+                <ContactNotes :contactId="contact.id" />
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </div>
@@ -138,6 +160,7 @@ import api from '@/api'
 import ContactForm from '@/features/contact/ContactForm.vue'
 import ContactNotes from '@/features/contact/ContactNotes.vue'
 import ContactConversations from '@/views/contact/ContactConversations.vue'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { createFormSchema } from '@/features/contact/formSchema.js'
 import { useEmitter } from '@/composables/useEmitter'
 import { EMITTER_EVENTS } from '@/constants/emitterEvents'
