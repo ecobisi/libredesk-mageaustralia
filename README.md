@@ -15,7 +15,7 @@ We're not trying to replace or compete with upstream Libredesk — we actively t
 
 Everything from upstream Libredesk is included. The following are additions in this fork.
 
-**Latest** — PCI credit card redaction, voicemail transcription (whisper.cpp), Gmail-style quoted thread in reply editor, permanent delete from trash, hover preview with latest reply.
+**Latest** — Spam-folder rescue for known senders (with IMAP MOVE-back to train Gmail), Submit & Set Status on new conversations, customer ticket history tab on contact detail page.
 
 ### Recent Activities
 
@@ -45,7 +45,27 @@ Full spam and trash lifecycle for conversations — manual actions, automatic cl
   - Media and attachments cleaned up on purge
 - **Admin settings**: Configure all retention periods at Admin > Trash & Cleanup (set to 0 to disable)
 - **Multi-folder IMAP polling**: Enter comma-separated mailbox names (e.g. `INBOX, [Gmail]/Spam`) to poll multiple folders — messages from spam/junk folders automatically get Spam status
+- **Auto-rescue for known senders**: Incoming messages that land in a polled spam folder are checked against the contacts database — if the sender has any prior outgoing agent reply, the conversation stays Open instead of being auto-spammed
+- **IMAP MOVE-back on un-spam**: When a message is auto-rescued, or when an agent manually clicks "Mark as not spam", the original message is MOVEd back to INBOX in IMAP. Gmail interprets this as a "not spam" signal and improves filtering for that sender on future deliveries. Falls back to COPY+STORE+EXPUNGE on servers without RFC 6851 support
 - New incoming messages on Spam or Trashed conversations do not reopen them
+
+### Submit & Set Status on New Conversations
+
+The "New conversation" dialog gets the same Send & Set Status pattern the reply box has on existing conversations.
+
+- **Split-button**: a chevron next to the Submit button opens a dropdown of statuses
+- **Dynamic list**: pulls from the same statuses store as the reply box, filtered by the admin-controlled `show_on_send` flag — toggle a status's visibility once at Admin > Statuses, both pickers update
+- **Scrollable**: dropdown caps at 60vh with overflow scroll for installs with many statuses
+- Conversation is created and immediately set to the chosen status (Snoozed is excluded since no duration is collected)
+
+### Customer Ticket History on Contact Detail
+
+The contact detail page (`/contacts/{id}`) now shows the full ticket history for that customer, à la Freshdesk's contact view.
+
+- **Tabs**: Previous Conversations (default open) and Notes
+- Lists up to 100 prior conversations with subject, last message preview, and relative timestamps
+- Click any row to jump straight into that conversation
+- Backed by `GET /api/v1/contacts/{id}/conversations` — gated on the existing `contacts:read` permission
 
 ### Advanced View Filters
 
