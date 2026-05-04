@@ -249,9 +249,37 @@
               :isGenerating="isGenerating"
               generateLabel="AI Assistance"
             />
-            <Button type="submit" :disabled="isDisabled" :isLoading="loading">
-              {{ $t('globals.messages.submit') }}
-            </Button>
+            <div class="flex">
+              <Button
+                type="submit"
+                :disabled="isDisabled"
+                :isLoading="loading"
+                class="rounded-r-none"
+              >
+                {{ $t('globals.messages.submit') }}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    :disabled="isDisabled || loading"
+                    class="px-1.5 rounded-l-none border-l border-primary-foreground/20"
+                  >
+                    <ChevronDown class="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" class="w-auto min-w-[16rem]">
+                  <DropdownMenuItem
+                    v-for="status in submitStatuses"
+                    :key="status"
+                    @click="submitWithStatus(status)"
+                    class="text-xs whitespace-nowrap py-1.5"
+                  >
+                    Submit and set as {{ status }}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -269,6 +297,13 @@ import {
   DialogDescription
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem
+} from '@/components/ui/dropdown-menu'
+import { ChevronDown } from 'lucide-vue-next'
 import { Input } from '@/components/ui/input'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
@@ -582,6 +617,14 @@ const handleGenerateResponse = async () => {
   }
 }
 
+const submitStatuses = ['Resolved', 'Closed']
+const pendingSubmitStatus = ref('')
+
+const submitWithStatus = (status) => {
+  pendingSubmitStatus.value = status
+  createConversation()
+}
+
 const createConversation = form.handleSubmit(async (values) => {
   loading.value = true
   try {
@@ -595,6 +638,9 @@ const createConversation = form.handleSubmit(async (values) => {
     values.bcc = bccEmails.value || ''
     // Initiator of this conversation is always agent
     values.initiator = UserTypeAgent
+    if (pendingSubmitStatus.value) {
+      values.set_status = pendingSubmitStatus.value
+    }
     const conversation = await api.createConversation(values)
     const conversationUUID = conversation.data.data.uuid
 
@@ -619,6 +665,7 @@ const createConversation = form.handleSubmit(async (values) => {
     })
   } finally {
     loading.value = false
+    pendingSubmitStatus.value = ''
   }
 })
 

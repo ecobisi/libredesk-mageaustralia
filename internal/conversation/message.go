@@ -1006,9 +1006,30 @@ func (m *Manager) processIncomingMessage(in models.IncomingMessage) error {
 	}
 
 	// Check if message came from a spam/junk IMAP folder and mark conversation accordingly.
+	// Rescue exception: if an agent has previously replied to this contact, the sender is
+	// trusted — leave the conversation Open instead of marking it Spam.
 	if isSpamMailbox(in.MailboxName) {
-		if err := m.MarkAsSpam(in.Message.ConversationUUID); err != nil {
-			m.lo.Error("error marking conversation as spam", "error", err, "uuid", in.Message.ConversationUUID)
+		knownSender, checkErr := m.ContactHasPriorAgentReply(in.Contact.ID)
+		if checkErr != nil {
+			m.lo.Error("error checking prior agent reply, defaulting to spam classification", "error", checkErr, "contact_id", in.Contact.ID)
+		}
+		if !knownSender {
+			if err := m.MarkAsSpam(in.Message.ConversationUUID); err != nil {
+				m.lo.Error("error marking conversation as spam", "error", err, "uuid", in.Message.ConversationUUID)
+			}
+		} else {
+			m.lo.Info("rescued message from spam folder, sender previously engaged by agent", "contact_id", in.Contact.ID, "uuid", in.Message.ConversationUUID)
+			// Tell the IMAP server (e.g. Gmail) "this isn't spam" by moving the
+			// original message back to INBOX. Async so a slow IMAP server doesn't
+			// stall message processing.
+			if m.IMAPUnspamFunc != nil && in.Message.SourceID.Valid && in.Message.SourceID.String != "" {
+				inboxID, sourceID := in.InboxID, in.Message.SourceID.String
+				go func() {
+					if err := m.IMAPUnspamFunc(inboxID, sourceID); err != nil {
+						m.lo.Error("error moving rescued message out of IMAP spam folder", "error", err, "message_id", sourceID, "inbox_id", inboxID)
+					}
+				}()
+			}
 		}
 	}
 

@@ -80,6 +80,7 @@ type Manager struct {
 	incomingMessageQueue       chan models.IncomingMessage
 	outgoingMessageQueue       chan models.Message
 	TranscribeFunc             func(audioData []byte, filename string) (string, error)
+	IMAPUnspamFunc             func(inboxID int, messageID string) error
 	outgoingProcessingMessages sync.Map
 	closed                     bool
 	closedMu                   sync.RWMutex
@@ -269,8 +270,10 @@ type queries struct {
 	// Spam and trash queries.
 	MoveToTrash        *sqlx.Stmt `query:"move-to-trash"`
 	RestoreFromTrash   *sqlx.Stmt `query:"restore-from-trash"`
-	MarkAsSpam         *sqlx.Stmt `query:"mark-as-spam"`
-	MarkAsNotSpam      *sqlx.Stmt `query:"mark-as-not-spam"`
+	MarkAsSpam                *sqlx.Stmt `query:"mark-as-spam"`
+	MarkAsNotSpam             *sqlx.Stmt `query:"mark-as-not-spam"`
+	ContactHasPriorAgentReply *sqlx.Stmt `query:"contact-has-prior-agent-reply"`
+	GetLatestIncomingSourceID *sqlx.Stmt `query:"get-latest-incoming-source-id"`
 	AutoTrashResolved  *sqlx.Stmt `query:"auto-trash-old-resolved"`
 	AutoTrashSpam      *sqlx.Stmt `query:"auto-trash-old-spam"`
 	PurgeOldTrash      *sqlx.Stmt `query:"purge-old-trash"`
@@ -1597,6 +1600,30 @@ func (m *Manager) MarkAsNotSpam(uuid string) error {
 		return err
 	}
 	return nil
+}
+
+// ContactHasPriorAgentReply reports whether the contact has any prior outgoing agent message.
+// Used to suppress spam-folder auto-classification for senders we've previously engaged with.
+func (m *Manager) ContactHasPriorAgentReply(contactID int) (bool, error) {
+	var exists bool
+	if err := m.q.ContactHasPriorAgentReply.Get(&exists, contactID); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// GetLatestIncomingMessageRef returns the source-id (Message-ID header) and inbox id
+// of the most recent incoming message for a conversation. Used to drive IMAP MOVE
+// when an agent un-spams a conversation.
+func (m *Manager) GetLatestIncomingMessageRef(conversationUUID string) (string, int, error) {
+	var row struct {
+		SourceID null.String `db:"source_id"`
+		InboxID  int         `db:"inbox_id"`
+	}
+	if err := m.q.GetLatestIncomingSourceID.Get(&row, conversationUUID); err != nil {
+		return "", 0, err
+	}
+	return row.SourceID.String, row.InboxID, nil
 }
 
 // MergeConversationRow is a lightweight struct for merge operations.

@@ -56,6 +56,7 @@
           <div class="mt-12 space-y-10">
             <ContactForm :formLoading="formLoading" :onSubmit="onSubmit" />
             <ContactNotes :contactId="contact.id" v-if="userStore.can('contact_notes:read')" />
+            <ContactConversations :contactId="contact.id" />
           </div>
         </div>
       </div>
@@ -136,6 +137,7 @@ import ContactDetail from '@/layouts/contact/ContactDetail.vue'
 import api from '@/api'
 import ContactForm from '@/features/contact/ContactForm.vue'
 import ContactNotes from '@/features/contact/ContactNotes.vue'
+import ContactConversations from '@/views/contact/ContactConversations.vue'
 import { createFormSchema } from '@/features/contact/formSchema.js'
 import { useEmitter } from '@/composables/useEmitter'
 import { EMITTER_EVENTS } from '@/constants/emitterEvents'

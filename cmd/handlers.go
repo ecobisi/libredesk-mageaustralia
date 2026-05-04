@@ -197,6 +197,7 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.POST("/api/v1/contacts/quick", perm(handleQuickCreateContact, "contacts:write"))
 	g.PUT("/api/v1/contacts/{id}/block", perm(handleBlockContact, "contacts:block"))
 	g.DELETE("/api/v1/contacts/{id}", perm(handleDeleteContact, "contacts:delete"))
+	g.GET("/api/v1/contacts/{id}/conversations", perm(handleGetContactConversations, "contacts:read"))
 
 	// Contact notes.
 	g.GET("/api/v1/contacts/{id}/notes", perm(handleGetContactNotes, "contact_notes:read"))

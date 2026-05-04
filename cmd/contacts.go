@@ -196,6 +196,23 @@ func handleGetContactNotes(r *fastglue.Request) error {
 	return r.SendEnvelope(notes)
 }
 
+// handleGetContactConversations returns the list of previous conversations for a contact,
+// powering the "all tickets for this customer" view on the contact detail page.
+func handleGetContactConversations(r *fastglue.Request) error {
+	var (
+		app          = r.Context.(*App)
+		contactID, _ = strconv.Atoi(r.RequestCtx.UserValue("id").(string))
+	)
+	if contactID <= 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.invalid", "name", "`id`"), nil, envelope.InputError)
+	}
+	conversations, err := app.conversation.GetContactPreviousConversations(contactID, 100)
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(conversations)
+}
+
 // handleCreateContactNote creates a note for a contact.
 func handleCreateContactNote(r *fastglue.Request) error {
 	var (

@@ -690,6 +690,27 @@ UPDATE conversations SET
     updated_at = NOW()
 WHERE uuid = $1;
 
+-- name: contact-has-prior-agent-reply
+SELECT EXISTS (
+    SELECT 1
+    FROM conversation_messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE c.contact_id = $1
+      AND m.sender_type = 'agent'
+      AND m.type = 'outgoing'
+);
+
+-- name: get-latest-incoming-source-id
+SELECT m.source_id, c.inbox_id
+FROM conversation_messages m
+JOIN conversations c ON c.id = m.conversation_id
+WHERE c.uuid = $1
+  AND m.type = 'incoming'
+  AND m.source_id IS NOT NULL
+  AND m.source_id != ''
+ORDER BY m.created_at DESC
+LIMIT 1;
+
 -- name: auto-trash-old-resolved
 UPDATE conversations SET
     status_id = (SELECT id FROM conversation_statuses WHERE name = 'Trashed'),

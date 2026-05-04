@@ -245,6 +245,10 @@ func main() {
 		return client.TranscribeAudio(audioData, filename)
 	}
 
+	// Wire IMAP "not spam" callback: when a message is auto-rescued from the spam folder
+	// because the sender has prior agent engagement, move it back to INBOX so Gmail learns.
+	conversation.IMAPUnspamFunc = inbox.UnspamIMAPMessage
+
 	startInboxes(ctx, inbox, conversation, user)
 	go automation.Run(ctx, automationWorkers)
 	go autoassigner.Run(ctx, autoAssignInterval)

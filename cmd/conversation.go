@@ -59,6 +59,7 @@ type createConversationRequest struct {
 	BCC             string `json:"bcc"`
 	Attachments     []int  `json:"attachments"`
 	Initiator       string `json:"initiator"` // "contact" | "agent"
+	SetStatus       string `json:"set_status,omitempty"`
 }
 
 // handleGetAllConversations retrieves all conversations.
@@ -867,6 +868,17 @@ func handleCreateConversation(r *fastglue.Request) error {
 		app.conversation.UpdateConversationUserAssignee(conversationUUID, req.AssignedAgentID, user)
 	}
 
+	// Apply requested status (Submit & Set Status). Only allow valid statuses
+	// the agent could otherwise reach via the existing status-change endpoint.
+	if req.SetStatus != "" && req.SetStatus != cmodels.StatusOpen {
+		validStatuses := []string{cmodels.StatusResolved, cmodels.StatusClosed}
+		if slices.Contains(validStatuses, req.SetStatus) {
+			if err := app.conversation.UpdateConversationStatus(conversationUUID, 0, req.SetStatus, "", user); err != nil {
+				app.lo.Warn("could not apply set_status on new conversation", "uuid", conversationUUID, "status", req.SetStatus, "error", err)
+			}
+		}
+	}
+
 	// Trigger webhook event for conversation created.
 	conversation, err := app.conversation.GetConversation(conversationID, "", "")
 	if err == nil {
@@ -1007,6 +1019,21 @@ func handleMarkAsNotSpam(r *fastglue.Request) error {
 	if err := app.conversation.MarkAsNotSpam(uuid); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
+
+	// Best-effort: tell the IMAP server (e.g. Gmail) "this isn't spam" by moving the
+	// most recent incoming message of this conversation back to INBOX. Failure to do so
+	// doesn't undo the not-spam mark — the agent is unblocked regardless.
+	sourceID, inboxID, err := app.conversation.GetLatestIncomingMessageRef(uuid)
+	if err != nil {
+		app.lo.Warn("could not look up source message for IMAP unspam", "uuid", uuid, "error", err)
+	} else if sourceID != "" {
+		go func() {
+			if err := app.inbox.UnspamIMAPMessage(inboxID, sourceID); err != nil {
+				app.lo.Error("failed to move message out of IMAP spam folder", "error", err, "message_id", sourceID, "inbox_id", inboxID)
+			}
+		}()
+	}
+
 	return r.SendEnvelope(true)
 }
 

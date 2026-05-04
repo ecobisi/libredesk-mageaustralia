@@ -525,6 +525,7 @@ const testEcommerceCustomer = (email) => http.get(`/api/v1/ecommerce/test/custom
 const testEcommerceOrder = (orderNumber) => http.get(`/api/v1/ecommerce/test/order?order_number=${encodeURIComponent(orderNumber)}`, { timeout: 30000 })
 
 const getContactNotes = (id) => http.get(`/api/v1/contacts/${id}/notes`)
+const getContactConversations = (id) => http.get(`/api/v1/contacts/${id}/conversations`)
 const createContactNote = (id, data) => http.post(`/api/v1/contacts/${id}/notes`, data, {
   headers: {
     'Content-Type': 'application/json'
@@ -766,6 +767,7 @@ export default {
   deleteCustomAttribute,
   getCustomAttribute,
   getContactNotes,
+  getContactConversations,
   createContactNote,
   deleteContactNote,
   getActivityLogs,
