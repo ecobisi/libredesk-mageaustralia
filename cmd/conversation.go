@@ -868,14 +868,12 @@ func handleCreateConversation(r *fastglue.Request) error {
 		app.conversation.UpdateConversationUserAssignee(conversationUUID, req.AssignedAgentID, user)
 	}
 
-	// Apply requested status (Submit & Set Status). Only allow valid statuses
-	// the agent could otherwise reach via the existing status-change endpoint.
-	if req.SetStatus != "" && req.SetStatus != cmodels.StatusOpen {
-		validStatuses := []string{cmodels.StatusResolved, cmodels.StatusClosed}
-		if slices.Contains(validStatuses, req.SetStatus) {
-			if err := app.conversation.UpdateConversationStatus(conversationUUID, 0, req.SetStatus, "", user); err != nil {
-				app.lo.Warn("could not apply set_status on new conversation", "uuid", conversationUUID, "status", req.SetStatus, "error", err)
-			}
+	// Apply requested status (Submit & Set Status). UpdateConversationStatus internally
+	// validates the status name via statusStore — invalid names are rejected there. We
+	// reject Snoozed up front since it requires a duration we don't collect here.
+	if req.SetStatus != "" && req.SetStatus != cmodels.StatusOpen && req.SetStatus != cmodels.StatusSnoozed {
+		if err := app.conversation.UpdateConversationStatus(conversationUUID, 0, req.SetStatus, "", user); err != nil {
+			app.lo.Warn("could not apply set_status on new conversation", "uuid", conversationUUID, "status", req.SetStatus, "error", err)
 		}
 	}
 

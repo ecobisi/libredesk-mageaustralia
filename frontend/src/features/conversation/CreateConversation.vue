@@ -268,7 +268,7 @@
                     <ChevronDown class="h-3.5 w-3.5" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" class="w-auto min-w-[16rem]">
+                <DropdownMenuContent align="end" class="w-auto min-w-[16rem] max-h-[60vh] overflow-y-auto">
                   <DropdownMenuItem
                     v-for="status in submitStatuses"
                     :key="status"
@@ -617,7 +617,14 @@ const handleGenerateResponse = async () => {
   }
 }
 
-const submitStatuses = ['Resolved', 'Closed']
+// Mirrors the reply-box "Send and set as" picker: pulls from the same statuses
+// store, filtered by the admin-controlled `show_on_send` flag. Excludes Open
+// (default for new convos) and Snoozed (needs a duration we don't collect here).
+const submitStatuses = computed(() =>
+  conversationStore.statuses
+    .filter(s => s.show_on_send && s.name !== 'Open' && s.name !== 'Snoozed')
+    .map(s => s.name)
+)
 const pendingSubmitStatus = ref('')
 
 const submitWithStatus = (status) => {
