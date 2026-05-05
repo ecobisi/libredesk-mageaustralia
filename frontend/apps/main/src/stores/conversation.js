@@ -1155,6 +1155,7 @@ export const useConversationStore = defineStore('conversation', () => {
     updateStatus,
     refreshConversationList,
     resetConversations,
+    reFetchConversationsList,
     updateConversationLastMessage,
     fetchFirstPageConversations,
     fetchStatuses,

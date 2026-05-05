@@ -105,4 +105,27 @@ watch(
     }
   }
 )
+
+// Restore filters and re-fetch when navigating back from a conversation detail
+// to its parent list. The route-params watcher above only fires when the list
+// itself changes (e.g. switching from My Inbox to Spam), so back-navigation
+// inside the same list bucket needs its own trigger.
+//
+// Why re-fetch as well as restore: while the agent was reading a ticket the
+// list state can drift — WebSocket events, bulk actions in another tab,
+// pending updates banner — and replaying the saved filters against stale
+// cached pages would silently apply the wrong filters to the wrong data.
+// resetConversations() + reFetchConversationsList() guarantees the next page
+// the agent sees was fetched with the restored filter set.
+watch(
+  () => route.name,
+  (newName, oldName) => {
+    if (oldName && oldName.includes('conversation') && newName && !newName.includes('conversation')) {
+      const listType = type.value || CONVERSATION_LIST_TYPE.ASSIGNED
+      conversationStore.restoreViewFilters(listType, teamID.value || 0, viewID.value || 0)
+      conversationStore.resetConversations()
+      conversationStore.reFetchConversationsList()
+    }
+  }
+)
 </script>
