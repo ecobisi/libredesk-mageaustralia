@@ -20,7 +20,7 @@ const searchQuery = ref('')
 
 // Determine operators based on field type
 const includeOp = computed(() => props.field.key === 'tags' ? 'contains' : 'in')
-const excludeOp = computed(() => props.field.key === 'tags' ? 'not_contains' : 'not_in')
+const excludeOp = computed(() => props.field.key === 'tags' ? 'not contains' : 'not_in')
 
 // Parse initial state from modelValue
 const mode = ref('include')

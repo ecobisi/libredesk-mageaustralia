@@ -69,7 +69,7 @@ const summaryText = computed(() => {
       const opt = options.find((o) => String(o.value) === String(v))
       return opt ? opt.label : v
     })
-    const prefix = (props.modelValue.operator === 'not_in' || props.modelValue.operator === 'not_contains')
+    const prefix = (props.modelValue.operator === 'not_in' || props.modelValue.operator === 'not contains')
       ? 'Not: '
       : ''
     if (names.length <= 2) return `${label}: ${prefix}${names.join(', ')}`

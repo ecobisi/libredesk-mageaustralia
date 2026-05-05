@@ -90,7 +90,12 @@ func New(cfg Config, i18n *i18n.I18n, rd *redis.Client, logger *logf.Logger) (*A
 	}
 
 	sess := simplesessions.New(simplesessions.Options{
-		EnableAutoCreate: true,
+		// AutoCreate intentionally off: a Redis miss during a brief deploy/restart
+		// window would otherwise silently mint a new empty session and overwrite the
+		// agent's cookie, kicking them to the login page and stranding their original
+		// session in Redis. With this off, a miss returns ErrInvalidSession cleanly,
+		// the middleware retries, and the original session id is preserved.
+		EnableAutoCreate: false,
 		SessionIDLength:  64,
 		Cookie: simplesessions.CookieOptions{
 			Name:       "libredesk_session",

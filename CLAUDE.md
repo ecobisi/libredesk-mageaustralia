@@ -4,11 +4,12 @@
 Libredesk is an open-source customer support desk application with custom RAG AI integration. This is a fork/customization of the upstream libredesk project.
 
 ## Remote Server
-- **Host**: ubuntu@16.176.157.255
+- **Host**: ubuntu@54.66.177.54
 - **Architecture**: ARM64 (AWS Graviton), 1.8GB RAM + 2GB swap
 - **Project Path**: /home/ubuntu/libredesk/
 - **URL**: Access via web browser (port 9000)
 - **IMPORTANT**: Never run `pnpm build` on the server — it OOM-kills the instance. Use the local deploy script instead.
+- **CRITICAL**: Server source is version-controlled. All changes are committed after each deploy. When using Agent tool to modify server files, agents MUST read the file immediately before writing — never cache file contents across multiple tool calls. Stale reads cause silent overwrites of other changes.
 
 ## Current Version & Branch
 - **Base Version**: v1.0.1 (upgraded 2026-02-03)
@@ -112,10 +113,10 @@ This script:
 cd /Volumes/second_disk/Development/libredesk/.frontend-build
 pnpm install --frozen-lockfile
 pnpm build
-rsync -az --delete dist/ ubuntu@16.176.157.255:/home/ubuntu/libredesk/frontend/dist/
+rsync -az --delete dist/ ubuntu@54.66.177.54:/home/ubuntu/libredesk/frontend/dist/
 
 # On server: Go build + stuffbin + Docker
-ssh ubuntu@16.176.157.255
+ssh ubuntu@54.66.177.54
 cd /home/ubuntu/libredesk
 export PATH=$PATH:/home/ubuntu/go/bin
 VERSION=$(git describe --tags --always)
@@ -267,12 +268,23 @@ POST /api/v1/conversations/:uuid/messages
 
 ## Upgrade Workflow
 
-### The Easy Way (Future Upgrades)
+### v1.0.3 → v2 port (in progress)
+
+The full feature-parity port from `v1.0.3-plus-enhancements` to upstream v2 is tracked as a structured spec, **not** a one-shot cherry-pick. Always check the spec before doing v2-related work.
+
+- **Branch (port target)**: `v2.1.1-plus-enhancements` on `mageaustralia/libredesk`
+- **Working dir**: `/Volumes/second_disk/Development/libredesk-staging/repo/`
+- **Design spec**: `docs/superpowers/specs/2026-04-27-v103-port-design.md` — sectioned task list (5.0 already-done, 5.1 Tier 1, 5.2 Email composer, 5.3 Email rendering, 5.4 Filters, 5.5 Macros/per-inbox, 5.6 IMAP plumbing, 5.7 Security, 5.8 Recent activities, 5.9 UX polish, 5.10–5.14 Tier 3). IDs like T1a, EC1, ER1, IP1 etc. with status `pending` / `done <hash>`.
+- **Tier plans**: `docs/superpowers/plans/` — per-tier execution plans.
+- **When adding a new v1.0.3 feature** that hasn't been ported yet: add a row to the right section of the spec with `pending` status, deps on prerequisite IDs, and a Notes column describing the change. Don't try to apply features to v2 ad-hoc.
+- **Per-session protocol**: read spec § 6. End-of-session push to `mageaustralia/v2.1.1-plus-enhancements` and checkpoint to shared memory under source `checkpoint-libredesk-port`.
+
+### Legacy cherry-pick workflow (only for hotfixes against same major)
 
 When a new upstream version is released:
 
 ```bash
-ssh ubuntu@16.176.157.255
+ssh ubuntu@54.66.177.54
 cd /home/ubuntu/libredesk
 
 # 1. Fetch new tags
