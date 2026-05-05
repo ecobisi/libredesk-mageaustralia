@@ -61,19 +61,52 @@
 
             <!-- Message preview + unread count -->
             <div class="flex items-center justify-between gap-2">
-              <p class="text-sm flex-1 min-w-0 truncate text-muted-foreground">
-                <template v-if="hasDraftForConversation">
-                  <span class="font-medium text-primary">{{ $t('globals.terms.draft') }}:</span>
-                  {{ draftPreview }}
-                </template>
-                <template v-else>
-                  <Reply
-                    class="text-green-600 inline-block align-text-bottom mr-0.5"
-                    :size="14"
-                    v-if="conversation.last_message_sender === 'agent'"
-                  />{{ trimmedLastMessage }}
-                </template>
-              </p>
+              <TooltipProvider :delay-duration="400">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p class="text-sm flex-1 min-w-0 truncate text-muted-foreground">
+                      <template v-if="hasDraftForConversation">
+                        <span class="font-medium text-primary">{{ $t('globals.terms.draft') }}:</span>
+                        {{ draftPreview }}
+                      </template>
+                      <template v-else>
+                        <Reply
+                          class="text-green-600 inline-block align-text-bottom mr-0.5"
+                          :size="14"
+                          v-if="conversation.last_message_sender === 'agent'"
+                        />{{ trimmedLastMessage }}
+                      </template>
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    v-if="!hasDraftForConversation && (conversation.first_message || conversation.last_message)"
+                    side="bottom"
+                    align="start"
+                    class="max-w-md p-3 text-xs leading-relaxed bg-popover text-popover-foreground border shadow-lg space-y-2"
+                  >
+                    <div v-if="conversation.first_message">
+                      <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                        {{ t('conversation.list.preview.originalMessage') }}
+                      </p>
+                      <p class="whitespace-pre-line line-clamp-4">{{ conversation.first_message }}</p>
+                    </div>
+                    <div
+                      v-if="conversation.last_message && conversation.last_message !== conversation.first_message"
+                      class="border-t pt-2"
+                    >
+                      <p
+                        class="text-[10px] font-semibold uppercase tracking-wide mb-1"
+                        :class="conversation.last_message_sender === 'agent' ? 'text-green-600' : 'text-muted-foreground'"
+                      >
+                        {{ conversation.last_message_sender === 'agent'
+                          ? t('conversation.list.preview.latestReplyAgent')
+                          : t('conversation.list.preview.latestReplyCustomer') }}
+                      </p>
+                      <p class="whitespace-pre-line line-clamp-4">{{ conversation.last_message }}</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <div
                 v-if="conversation.unread_message_count > 0 && !canAssignAgent && !canAssignTeam"
                 class="flex items-center justify-center w-5 h-5 bg-green-600 text-white text-xs font-medium rounded-full flex-shrink-0"
@@ -227,6 +260,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@shared-ui/components/ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@shared-ui/components/ui/tooltip'
 import SlaBadge from '@main/features/sla/SlaBadge.vue'
 import { Checkbox } from '@shared-ui/components/ui/checkbox'
 import { useConversationStore } from '@main/stores/conversation'

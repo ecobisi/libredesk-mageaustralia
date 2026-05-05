@@ -59,6 +59,9 @@ SELECT
     conversations.last_message,
     conversations.last_message_at,
     conversations.last_message_sender,
+    (SELECT text_content FROM conversation_messages
+     WHERE conversation_id = conversations.id AND type != 'activity'
+     ORDER BY id ASC LIMIT 1) AS first_message,
     conversations.last_interaction,
     conversations.last_interaction_at,
     conversations.last_interaction_sender,

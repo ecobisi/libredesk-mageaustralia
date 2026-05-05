@@ -73,25 +73,62 @@
           </div>
         </TableCell>
 
-        <!-- Subject -->
+        <!-- Subject with hover preview -->
         <TableCell class="px-2 py-2">
-          <div class="flex items-center gap-1.5 min-w-0">
-            <span
-              v-if="conversation.reference_number"
-              class="text-xs text-muted-foreground whitespace-nowrap"
-            >
-              #{{ conversation.reference_number }}
-            </span>
-            <span class="truncate font-medium text-xs">
-              {{ conversation.subject || t('conversation.list.noSubject') }}
-            </span>
-            <div
-              v-if="conversation.unread_message_count > 0"
-              class="shrink-0 w-4 h-4 flex items-center justify-center bg-primary text-primary-foreground text-xs font-medium rounded-full"
-            >
-              {{ conversation.unread_message_count }}
-            </div>
-          </div>
+          <TooltipProvider :delay-duration="400">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span
+                    v-if="conversation.reference_number"
+                    class="text-xs text-muted-foreground whitespace-nowrap"
+                  >
+                    #{{ conversation.reference_number }}
+                  </span>
+                  <span class="truncate font-medium text-xs">
+                    {{ conversation.subject || t('conversation.list.noSubject') }}
+                  </span>
+                  <div
+                    v-if="conversation.unread_message_count > 0"
+                    class="shrink-0 w-4 h-4 flex items-center justify-center bg-primary text-primary-foreground text-xs font-medium rounded-full"
+                  >
+                    {{ conversation.unread_message_count }}
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent
+                v-if="conversation.first_message"
+                side="bottom"
+                align="start"
+                class="max-w-md p-3 text-xs leading-relaxed bg-popover text-popover-foreground border shadow-lg space-y-2"
+              >
+                <div>
+                  <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                    {{ t('conversation.list.preview.originalMessage') }}
+                  </p>
+                  <div class="whitespace-pre-line">
+                    {{ truncatePreview(conversation.first_message) }}
+                  </div>
+                </div>
+                <div
+                  v-if="conversation.last_interaction && conversation.last_interaction !== conversation.first_message"
+                  class="border-t pt-2"
+                >
+                  <p
+                    class="text-[10px] font-semibold uppercase tracking-wide mb-1"
+                    :class="conversation.last_interaction_sender === 'agent' ? 'text-green-600' : 'text-muted-foreground'"
+                  >
+                    {{ conversation.last_interaction_sender === 'agent'
+                      ? t('conversation.list.preview.latestReplyAgent')
+                      : t('conversation.list.preview.latestReplyCustomer') }}
+                  </p>
+                  <div class="whitespace-pre-line">
+                    {{ truncatePreview(conversation.last_interaction) }}
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </TableCell>
 
         <!-- Status -->
@@ -133,6 +170,7 @@ import { useStorage } from '@vueuse/core'
 import { Avatar, AvatarFallback, AvatarImage } from '@shared-ui/components/ui/avatar'
 import { Checkbox } from '@shared-ui/components/ui/checkbox'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@shared-ui/components/ui/table'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@shared-ui/components/ui/tooltip'
 import { getRelativeTime } from '@shared-ui/utils/datetime.js'
 import { useConversationStore } from '@/stores/conversation'
 import { useConversationRoute } from '@/composables/useConversationRoute'
@@ -221,6 +259,12 @@ const toggleSelectAll = () => {
 
 const initials = (contact) => {
   return contact?.first_name?.substring(0, 2)?.toUpperCase() || '?'
+}
+
+const PREVIEW_MAX = 300
+const truncatePreview = (text) => {
+  const s = text || ''
+  return s.length > PREVIEW_MAX ? s.slice(0, PREVIEW_MAX) + '...' : s
 }
 
 const priorityDotClass = (priority) => {
