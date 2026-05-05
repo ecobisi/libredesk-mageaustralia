@@ -718,7 +718,8 @@ UPDATE conversations SET
     updated_at = NOW()
 WHERE status_id IN (SELECT id FROM conversation_statuses WHERE name IN ('Resolved', 'Closed'))
 AND updated_at < NOW() - INTERVAL '1 day' * $1
-AND trashed_at IS NULL;
+AND trashed_at IS NULL
+RETURNING uuid;
 
 -- name: auto-trash-old-spam
 UPDATE conversations SET
@@ -726,7 +727,8 @@ UPDATE conversations SET
     trashed_at = NOW(),
     updated_at = NOW()
 WHERE status_id = (SELECT id FROM conversation_statuses WHERE name = 'Spam')
-AND created_at < NOW() - INTERVAL '1 day' * $1;
+AND created_at < NOW() - INTERVAL '1 day' * $1
+RETURNING uuid;
 
 -- name: purge-old-trash-media
 DELETE FROM media WHERE model_type = 'messages' AND model_id IN (
