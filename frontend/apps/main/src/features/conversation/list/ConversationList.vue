@@ -392,7 +392,12 @@ function handleFiltersChange (filters) {
   }
   const deduped = Array.from(seen.values())
   adHocFilters.value = deduped
-  const meaningful = deduped.filter(f => f.value && f.value !== '[]' && f.value !== '')
+  // `set` / `not set` operators are intentionally valueless (they translate
+  // to IS NOT NULL / IS NULL on the backend) so don't strip them out.
+  const meaningful = deduped.filter(f =>
+    (f.value && f.value !== '[]' && f.value !== '') ||
+    f.operator === 'not set' || f.operator === 'set'
+  )
   conversationStore.setAdHocFilters(meaningful)
 }
 

@@ -595,8 +595,13 @@ export const useConversationStore = defineStore('conversation', () => {
     // them on every call.
     if (filters) conversations.listFilters = [...filters]
     if (conversations.adHocFilters && conversations.adHocFilters.length > 0) {
+      // `set` / `not set` are valueless operators on the backend (translate
+      // to IS NOT NULL / IS NULL). Without the operator check they get
+      // dropped by the empty-value guard, which is what hid the "Unassigned
+      // agent" pill from actually filtering.
       const validAdHoc = conversations.adHocFilters.filter(
-        f => f.value && f.value !== '[]' && f.value !== ''
+        f => (f.value && f.value !== '[]' && f.value !== '') ||
+          f.operator === 'not set' || f.operator === 'set'
       )
       filters = [...filters, ...validAdHoc]
     }
