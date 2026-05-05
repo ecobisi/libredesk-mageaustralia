@@ -324,6 +324,13 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.GET("/assets/{all:*}", serveFrontendStaticFiles)
 	g.GET("/widget/assets/{all:*}", serveWidgetStaticFiles)
 	g.GET("/images/{all:*}", serveFrontendStaticFiles)
+	g.GET("/favicon.ico", serveFrontendStaticFiles)
+	g.GET("/favicon.svg", serveFrontendStaticFiles)
+	g.GET("/favicon-96x96.png", serveFrontendStaticFiles)
+	g.GET("/apple-touch-icon.png", serveFrontendStaticFiles)
+	g.GET("/site.webmanifest", serveFrontendStaticFiles)
+	g.GET("/web-app-manifest-192x192.png", serveFrontendStaticFiles)
+	g.GET("/web-app-manifest-512x512.png", serveFrontendStaticFiles)
 	g.GET("/static/public/{all:*}", serveStaticFiles)
 
 	// Public pages.
