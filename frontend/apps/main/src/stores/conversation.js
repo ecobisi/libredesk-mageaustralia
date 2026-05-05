@@ -10,7 +10,7 @@ import { subscribeToConversation, sendTypingIndicator } from '@main/websocket'
 import { playNotificationSound } from '@shared-ui/composables/useNotificationSound'
 import MessageCache from '../utils/conversation-message-cache'
 import { getI18n } from '../i18n'
-import { useDebounceFn } from '@vueuse/core'
+import { useDebounceFn, useStorage } from '@vueuse/core'
 import { CONVERSATION_LIST_TYPE, CONVERSATION_DEFAULT_STATUSES } from '@/constants/conversation'
 import api from '../api'
 
@@ -183,6 +183,47 @@ export const useConversationStore = defineStore('conversation', () => {
 
   const incrementMessageVersion = () => setTimeout(() => messages.version++, 0)
 
+  // Per-view filter persistence. Keyed by listType / team / view so each
+  // sidebar entry remembers its own status, sort, and ad-hoc pill set across
+  // refreshes and sessions. Cross-tab sync comes free with useStorage.
+  // Shape: { [viewKey: string]: { status: string[], sortField: string,
+  // adHocFilters: object[] } }
+  const viewFiltersStorage = useStorage('viewFilters', {})
+
+  function _viewKey (listType, teamID, viewID) {
+    if (teamID) return `team:${teamID}`
+    if (viewID) return `view:${viewID}`
+    return listType || 'assigned'
+  }
+
+  function saveViewFilters () {
+    const key = _viewKey(conversations.listType, conversations.teamID, conversations.viewID)
+    if (!key) return
+    // Spread into a new object so useStorage's deep watcher picks up the
+    // change. Mutating the inner property in place wouldn't always trigger
+    // a write in some Vue versions.
+    viewFiltersStorage.value = {
+      ...viewFiltersStorage.value,
+      [key]: {
+        status: [...conversations.status],
+        sortField: conversations.sortField,
+        adHocFilters: [...conversations.adHocFilters]
+      }
+    }
+  }
+
+  // Pull saved filter state into the reactive `conversations` object. Returns
+  // true if a saved entry existed (caller can fall back to defaults otherwise).
+  function restoreViewFilters (listType, teamID, viewID) {
+    const key = _viewKey(listType, teamID, viewID)
+    const saved = viewFiltersStorage.value?.[key]
+    if (!saved) return false
+    conversations.status = Array.isArray(saved.status) ? [...saved.status] : []
+    conversations.sortField = saved.sortField || 'newest'
+    conversations.adHocFilters = Array.isArray(saved.adHocFilters) ? [...saved.adHocFilters] : []
+    return true
+  }
+
   function setListStatus (status, fetch = true) {
     // Accept a single status name (back-compat) or an array of names; an
     // empty/null value clears the filter ("All").
@@ -193,7 +234,11 @@ export const useConversationStore = defineStore('conversation', () => {
     } else {
       conversations.status = [status]
     }
+    // Only persist on user-initiated changes. View-switch seeding (fetch=false)
+    // is the InboxView wrapper's job — it manages save/restore explicitly to
+    // avoid clobbering the previous view's saved state during the transition.
     if (fetch) {
+      saveViewFilters()
       resetConversations()
       reFetchConversationsList()
     }
@@ -213,6 +258,7 @@ export const useConversationStore = defineStore('conversation', () => {
     } else {
       conversations.status.push(status)
     }
+    saveViewFilters()
     resetConversations()
     reFetchConversationsList()
   }
@@ -235,6 +281,7 @@ export const useConversationStore = defineStore('conversation', () => {
   function setListSortField (field) {
     if (conversations.sortField === field) return
     conversations.sortField = field
+    saveViewFilters()
     resetConversations()
     reFetchConversationsList()
   }
@@ -242,13 +289,19 @@ export const useConversationStore = defineStore('conversation', () => {
   // FilterBar pill changes hit this in a hot loop while the user toggles
   // checkboxes. Debounce 500 ms so a multi-select burst issues one API call,
   // and dedupe by `model.field` so the same field can't accumulate two pills.
+  // `fetch=false` lets InboxView seed state during view-switch without firing
+  // a redundant request — fetchConversationsList runs on the very next tick.
   let _adHocDebounce = null
-  function setAdHocFilters (filters) {
+  function setAdHocFilters (filters, fetch = true) {
     const seen = new Map()
     for (const f of filters) {
       seen.set(`${f.model}.${f.field}`, f)
     }
     conversations.adHocFilters = Array.from(seen.values())
+    // Same persistence rule as setListStatus: only write through on user-driven
+    // changes. View-switch seeding sets fetch=false and the wrapper persists.
+    if (!fetch) return
+    saveViewFilters()
     if (_adHocDebounce) clearTimeout(_adHocDebounce)
     _adHocDebounce = setTimeout(() => {
       resetConversations()
@@ -1109,6 +1162,8 @@ export const useConversationStore = defineStore('conversation', () => {
     setListSortField,
     setListStatus,
     setAdHocFilters,
+    saveViewFilters,
+    restoreViewFilters,
     toggleListStatus,
     removeMacroAction,
     getMacro,

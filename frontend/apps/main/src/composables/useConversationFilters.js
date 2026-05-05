@@ -60,7 +60,16 @@ export function useConversationFilters () {
             label: t('actions.assignAgent'),
             type: FIELD_TYPE.SELECT,
             operators: FIELD_OPERATORS.SELECT,
-            options: uStore.options
+            // Prepend the dynamic "$current_user" token so shared/saved views
+            // can reference whoever is logged in at query time. The backend
+            // (cmd/conversation.go) substitutes the literal "$current_user"
+            // string with the caller's user ID before handing the filter to
+            // the SQL builder. Keeps a single saved view useful to every
+            // agent ("conversations assigned to me").
+            options: [
+                { label: t('filter.value.currentUser'), value: '$current_user' },
+                ...uStore.options
+            ]
         },
         inbox_id: {
             label: t('globals.terms.inbox'),

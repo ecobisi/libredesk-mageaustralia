@@ -631,6 +631,7 @@
   "filter.search": "Search...",
   "filter.searchFields": "Search fields...",
   "filter.to": "To",
+  "filter.value.currentUser": "(Current user)",
   "globals.messages.add": "Add",
   "globals.messages.addAnnouncement": "Add announcement",
   "globals.messages.addEmoji": "Add emoji",

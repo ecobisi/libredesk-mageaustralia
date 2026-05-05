@@ -320,7 +320,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { MessageCircleQuestion, MessageCircleWarning, ChevronDown, Loader2, X, LayoutList, Table2, Trash2 } from 'lucide-vue-next'
@@ -364,7 +364,22 @@ const { conversationsPillBarFields: pillBarFields } = useConversationFilters()
 // Local mirror of store-side adHocFilters: FilterBar drives this directly,
 // the store debounces the actual fetch. Keeping a local ref means the UI
 // stays snappy while the user toggles checkboxes inside a pill popover.
-const adHocFilters = ref([])
+// Seed from the store so persisted/restored filters (per-view persistence)
+// show up as pills on initial mount and on view-switch — without this watch
+// the pill bar would render empty even when the store has restored values.
+const adHocFilters = ref([...(conversationStore.conversations.adHocFilters || [])])
+watch(
+  () => conversationStore.conversations.adHocFilters,
+  (next) => {
+    // Skip updates that originate from this component (handleFiltersChange
+    // already set adHocFilters.value); only mirror external changes (route
+    // switch via InboxView restore). Cheap shallow equality is enough — the
+    // store builds a fresh array on every mutation.
+    if (next === adHocFilters.value) return
+    adHocFilters.value = [...(next || [])]
+  },
+  { deep: false }
+)
 
 function handleFiltersChange (filters) {
   // Dedupe by field key (UI shouldn't allow duplicates but defend in depth)
