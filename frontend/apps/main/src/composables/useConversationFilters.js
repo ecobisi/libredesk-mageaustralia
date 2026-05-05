@@ -286,6 +286,26 @@ export function useConversationFilters () {
     }))
 
 
+    // Field set for the horizontal pill-bar filter UI (FilterBar.vue) on the
+    // conversation list. Shape differs from `conversationsListFilters` above:
+    // each entry uses `key` (not the keyed-object pattern) plus `model` so the
+    // saved-view backend can route the filter to the right table, and `type`
+    // is descriptive so FilterBar can pick the right editor (multi-select vs
+    // date picker).
+    const conversationsPillBarFields = computed(() => [
+        { key: 'status_id', label: t('globals.terms.status'), type: 'multi_select', options: cStore.statusOptions, model: 'conversations' },
+        { key: 'priority_id', label: t('globals.terms.priority'), type: 'multi_select', options: cStore.priorityOptions, model: 'conversations' },
+        { key: 'assigned_user_id', label: t('globals.terms.agent'), type: 'multi_select', options: uStore.options, model: 'conversations' },
+        { key: 'assigned_team_id', label: t('globals.terms.team'), type: 'multi_select', options: tStore.options, model: 'conversations' },
+        { key: 'inbox_id', label: t('globals.terms.inbox'), type: 'multi_select', options: iStore.options, model: 'conversations' },
+        { key: 'tags', label: t('globals.terms.tag', 2), type: 'multi_select', options: tagStore.tagOptions, model: 'conversations' },
+        { key: 'created_at', label: t('filter.field.createdAt'), type: 'date', model: 'conversations' },
+        { key: 'last_message_at', label: t('filter.field.lastActivity'), type: 'date', model: 'conversations' },
+        { key: 'closed_at', label: t('filter.field.closedAt'), type: 'date', model: 'conversations' },
+        { key: 'resolved_at', label: t('filter.field.resolvedAt'), type: 'date', model: 'conversations' },
+        { key: 'next_sla_deadline_at', label: t('filter.field.slaDeadline'), type: 'date', model: 'conversations' },
+    ])
+
     return {
         conversationsListFilters,
         conversationFilters,
@@ -293,5 +313,6 @@ export function useConversationFilters () {
         conversationActions,
         macroActions,
         contactCustomAttributes,
+        conversationsPillBarFields,
     }
 }

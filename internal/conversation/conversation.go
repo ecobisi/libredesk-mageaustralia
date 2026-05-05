@@ -49,7 +49,7 @@ var (
 	//go:embed queries.sql
 	efs                             embed.FS
 	errConversationNotFound         = errors.New("conversation not found")
-	conversationsAllowedFields      = []string{"status_id", "priority_id", "assigned_team_id", "assigned_user_id", "inbox_id", "last_message_at", "last_interaction_at", "created_at", "waiting_since", "next_sla_deadline_at", "priority_id"}
+	conversationsAllowedFields      = []string{"status_id", "priority_id", "assigned_team_id", "assigned_user_id", "inbox_id", "last_message_at", "last_interaction_at", "created_at", "waiting_since", "next_sla_deadline_at", "priority_id", "closed_at", "resolved_at"}
 	conversationStatusAllowedFields = []string{"id", "name"}
 	usersAllowedFields              = []string{"email"}
 )

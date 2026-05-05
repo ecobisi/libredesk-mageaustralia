@@ -124,16 +124,14 @@
     </div>
 
     <!-- Filters (hidden when bulk selecting) -->
-    <div v-else class="p-2 flex justify-between items-center">
+    <div v-else class="p-2 flex flex-wrap items-center gap-1.5">
       <!-- Status dropdown-menu, hidden when a view is selected as views are pre-filtered -->
       <DropdownMenu v-if="!route.params.viewID">
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" class="w-30">
-            <div>
-              <span class="mr-1">{{ conversationStore.conversations.total }}</span>
-              <span>{{ conversationStore.listStatusLabel }}</span>
-            </div>
-            <ChevronDown class="w-4 h-4 ml-2 opacity-50" />
+          <Button variant="ghost" size="sm" class="shrink-0">
+            <span class="mr-1">{{ conversationStore.conversations.total }}</span>
+            <span>{{ conversationStore.listStatusLabel }}</span>
+            <ChevronDown class="w-4 h-4 ml-1 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
@@ -159,12 +157,20 @@
         </DropdownMenuContent>
       </DropdownMenu>
       <div v-else>
-        <Button variant="ghost" class="w-30">
+        <Button variant="ghost" size="sm" class="shrink-0">
           <span>{{ conversationStore.conversations.total }}</span>
         </Button>
       </div>
 
-      <div class="flex items-center gap-1">
+      <!-- Filter pills + add-filter button (inline alongside the status counter) -->
+      <FilterBar
+        :fields="pillBarFields"
+        :model-value="adHocFilters"
+        @update:model-value="handleFiltersChange"
+      />
+
+      <!-- Right-side controls -->
+      <div class="flex items-center gap-1 ml-auto shrink-0">
         <!-- View-mode switcher -->
         <div class="flex border rounded-md p-0.5">
           <Button
@@ -335,9 +341,11 @@ import { useUsersStore } from '@/stores/users'
 import { useTeamStore } from '@/stores/team'
 import { useUserStore } from '@/stores/user'
 import { useToast } from '@/composables/useToast'
+import { useConversationFilters } from '@/composables/useConversationFilters'
 import { permissions as p } from '@/constants/permissions'
 import api from '@/api'
 import { useViewMode } from '@/composables/useViewMode'
+import FilterBar from '@/components/filter/FilterBar.vue'
 import EmptyList from '@/features/conversation/list/ConversationEmptyList.vue'
 import ConversationListItem from '@/features/conversation/list/ConversationListItem.vue'
 import ConversationListItemSkeleton from '@/features/conversation/list/ConversationListItemSkeleton.vue'
@@ -352,6 +360,26 @@ const { t } = useI18n()
 const toast = useToast()
 const { viewMode, setViewMode } = useViewMode()
 const bulkLoading = ref(false)
+const { conversationsPillBarFields: pillBarFields } = useConversationFilters()
+// Local mirror of store-side adHocFilters: FilterBar drives this directly,
+// the store debounces the actual fetch. Keeping a local ref means the UI
+// stays snappy while the user toggles checkboxes inside a pill popover.
+const adHocFilters = ref([])
+
+function handleFiltersChange (filters) {
+  // Dedupe by field key (UI shouldn't allow duplicates but defend in depth)
+  // and forward to the store. Store strips empty arrays before they hit the
+  // wire, but we also drop them locally so the pill UI doesn't flash an
+  // active-but-empty pill while the user is mid-edit.
+  const seen = new Map()
+  for (const f of filters) {
+    seen.set(f.field, f)
+  }
+  const deduped = Array.from(seen.values())
+  adHocFilters.value = deduped
+  const meaningful = deduped.filter(f => f.value && f.value !== '[]' && f.value !== '')
+  conversationStore.setAdHocFilters(meaningful)
+}
 
 const canAssignAgent = computed(() => userStore.can(p.CONVERSATIONS_UPDATE_USER_ASSIGNEE))
 const canAssignTeam = computed(() => userStore.can(p.CONVERSATIONS_UPDATE_TEAM_ASSIGNEE))

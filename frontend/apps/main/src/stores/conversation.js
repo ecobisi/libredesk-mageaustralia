@@ -154,7 +154,12 @@ export const useConversationStore = defineStore('conversation', () => {
     page: 1,
     hasMore: false,
     total: 0,
-    errorMessage: ''
+    errorMessage: '',
+    // Ad-hoc filters applied via the FilterBar pill UI on the conversation
+    // list. Merged into `listFilters` on every fetch. Separated from the
+    // route-derived base filters so re-fetching the list doesn't double-add
+    // pills, and so the pill UI has a single source of truth.
+    adHocFilters: []
   })
 
   const conversation = reactive({
@@ -232,6 +237,23 @@ export const useConversationStore = defineStore('conversation', () => {
     conversations.sortField = field
     resetConversations()
     reFetchConversationsList()
+  }
+
+  // FilterBar pill changes hit this in a hot loop while the user toggles
+  // checkboxes. Debounce 500 ms so a multi-select burst issues one API call,
+  // and dedupe by `model.field` so the same field can't accumulate two pills.
+  let _adHocDebounce = null
+  function setAdHocFilters (filters) {
+    const seen = new Map()
+    for (const f of filters) {
+      seen.set(`${f.model}.${f.field}`, f)
+    }
+    conversations.adHocFilters = Array.from(seen.values())
+    if (_adHocDebounce) clearTimeout(_adHocDebounce)
+    _adHocDebounce = setTimeout(() => {
+      resetConversations()
+      reFetchConversationsList()
+    }, 500)
   }
 
   const getListSortField = computed(() => {
@@ -514,6 +536,17 @@ export const useConversationStore = defineStore('conversation', () => {
     if (listType) conversations.listType = listType
     if (teamID) conversations.teamID = teamID
     if (viewID) conversations.viewID = viewID
+    // Snapshot the route-derived base filters before merging ad-hoc / status
+    // additions. Saving the merged result back to `listFilters` here would
+    // cause the next reFetch to re-merge the same ad-hoc filters, multiplying
+    // them on every call.
+    if (filters) conversations.listFilters = [...filters]
+    if (conversations.adHocFilters && conversations.adHocFilters.length > 0) {
+      const validAdHoc = conversations.adHocFilters.filter(
+        f => f.value && f.value !== '[]' && f.value !== ''
+      )
+      filters = [...filters, ...validAdHoc]
+    }
     if (conversations.status.length > 0) {
       filters = filters.filter(f => f.model !== 'conversation_statuses')
       // Single status uses `equals` (cheaper plan); multiple uses `in`.
@@ -535,7 +568,6 @@ export const useConversationStore = defineStore('conversation', () => {
         })
       }
     }
-    if (filters) conversations.listFilters = filters
     if (showLoader) conversations.loading = true
     try {
       conversations.errorMessage = ''
@@ -1076,6 +1108,7 @@ export const useConversationStore = defineStore('conversation', () => {
     fetchPriorities,
     setListSortField,
     setListStatus,
+    setAdHocFilters,
     toggleListStatus,
     removeMacroAction,
     getMacro,
