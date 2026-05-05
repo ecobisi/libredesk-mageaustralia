@@ -226,8 +226,11 @@ export const useConversationStore = defineStore('conversation', () => {
     } else {
       conversations.status = Array.isArray(status) ? status : [status]
     }
-    saveViewFilters()
+    // Only persist on user-initiated changes. View-switch seeding (fetch=false)
+    // is the InboxView wrapper's job — it saves the outgoing view's state and
+    // restores the new one's; saving here would clobber the saved good state.
     if (fetch) {
+      saveViewFilters()
       resetConversations()
       reFetchConversationsList()
     }
@@ -271,14 +274,15 @@ export const useConversationStore = defineStore('conversation', () => {
       seen.set(f.model + "." + f.field, f)
     }
     conversations.adHocFilters = Array.from(seen.values())
+    // Same persistence rule as setListStatus: only write through on user-driven
+    // changes. View-switch seeding sets fetch=false and the wrapper persists.
+    if (!fetch) return
     saveViewFilters()
-    if (fetch) {
-      if (_adHocDebounce) clearTimeout(_adHocDebounce)
-      _adHocDebounce = setTimeout(() => {
-        resetConversations()
-        reFetchConversationsList()
-      }, 500)
-    }
+    if (_adHocDebounce) clearTimeout(_adHocDebounce)
+    _adHocDebounce = setTimeout(() => {
+      resetConversations()
+      reFetchConversationsList()
+    }, 500)
   }
 
   const getListSortField = computed(() => {
