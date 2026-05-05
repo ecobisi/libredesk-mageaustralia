@@ -1,8 +1,8 @@
 <template>
-  <CommandDialog :open="open" @update:open="toggleOpen" class="transform-gpu z-[51] !min-w-[50vw]">
+  <CommandDialog :open="open" @update:open="toggleOpen" class="transform-gpu z-[51] !w-[80vw] !max-w-[80vw]">
     <CommandInput :placeholder="t('command.typeCmdOrSearch')" @keydown="onInputKeydown" />
     <CommandList
-      class="!min-h-[60vh] h-[60vh] !min-w-[50vw]"
+      class="!min-h-[60vh] h-[60vh]"
       :class="{ 'overflow-hidden': nestedCommand === 'apply-macro' }"
     >
       <CommandEmpty>

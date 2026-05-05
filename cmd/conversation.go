@@ -934,7 +934,7 @@ func handleMoveToTrash(r *fastglue.Request) error {
 	if _, err := enforceConversationAccess(app, uuid, user); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
-	if err := app.conversation.MoveToTrash(uuid); err != nil {
+	if err := app.conversation.MoveToTrash(uuid, user); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 	return r.SendEnvelope(true)
@@ -954,7 +954,7 @@ func handleRestoreFromTrash(r *fastglue.Request) error {
 	if _, err := enforceConversationAccess(app, uuid, user); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
-	if err := app.conversation.RestoreFromTrash(uuid); err != nil {
+	if err := app.conversation.RestoreFromTrash(uuid, user); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 	return r.SendEnvelope(true)
@@ -994,7 +994,7 @@ func handleMarkAsSpam(r *fastglue.Request) error {
 	if _, err := enforceConversationAccess(app, uuid, user); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
-	if err := app.conversation.MarkAsSpam(uuid); err != nil {
+	if err := app.conversation.MarkAsSpam(uuid, user); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 	return r.SendEnvelope(true)
@@ -1014,7 +1014,7 @@ func handleMarkAsNotSpam(r *fastglue.Request) error {
 	if _, err := enforceConversationAccess(app, uuid, user); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
-	if err := app.conversation.MarkAsNotSpam(uuid); err != nil {
+	if err := app.conversation.MarkAsNotSpam(uuid, user); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 

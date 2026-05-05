@@ -1014,7 +1014,10 @@ func (m *Manager) processIncomingMessage(in models.IncomingMessage) error {
 			m.lo.Error("error checking prior agent reply, defaulting to spam classification", "error", checkErr, "contact_id", in.Contact.ID)
 		}
 		if !knownSender {
-			if err := m.MarkAsSpam(in.Message.ConversationUUID); err != nil {
+			// System-driven spam classification — pass zero-value actor; the manager
+			// skips activity-note recording when actor.ID == 0 since the IMAP source
+			// folder is implicit context.
+			if err := m.MarkAsSpam(in.Message.ConversationUUID, umodels.User{}); err != nil {
 				m.lo.Error("error marking conversation as spam", "error", err, "uuid", in.Message.ConversationUUID)
 			}
 		} else {

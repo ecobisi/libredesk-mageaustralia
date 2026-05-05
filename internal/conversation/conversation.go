@@ -1570,34 +1570,50 @@ func (c *Manager) makeConversationsListQuery(viewingUserID, userID int, teamIDs 
 	})
 }
 
-// MoveToTrash moves a conversation to trash.
-func (m *Manager) MoveToTrash(uuid string) error {
+// MoveToTrash moves a conversation to trash and records who did it.
+func (m *Manager) MoveToTrash(uuid string, actor umodels.User) error {
 	if _, err := m.q.MoveToTrash.Exec(uuid); err != nil {
 		return err
 	}
+	if err := m.RecordStatusChange(models.StatusTrashed, uuid, actor); err != nil {
+		m.lo.Error("error recording status-change activity for trash", "uuid", uuid, "error", err)
+	}
 	return nil
 }
 
-// RestoreFromTrash restores a conversation from trash to open.
-func (m *Manager) RestoreFromTrash(uuid string) error {
+// RestoreFromTrash restores a conversation from trash to open and records who did it.
+func (m *Manager) RestoreFromTrash(uuid string, actor umodels.User) error {
 	if _, err := m.q.RestoreFromTrash.Exec(uuid); err != nil {
 		return err
 	}
-	return nil
-}
-
-// MarkAsSpam marks a conversation as spam.
-func (m *Manager) MarkAsSpam(uuid string) error {
-	if _, err := m.q.MarkAsSpam.Exec(uuid); err != nil {
-		return err
+	if err := m.RecordStatusChange(models.StatusOpen, uuid, actor); err != nil {
+		m.lo.Error("error recording status-change activity for restore", "uuid", uuid, "error", err)
 	}
 	return nil
 }
 
-// MarkAsNotSpam marks a spam conversation as open.
-func (m *Manager) MarkAsNotSpam(uuid string) error {
+// MarkAsSpam marks a conversation as spam and records who did it. The actor is optional —
+// when zero (e.g. system-driven auto-classification from spam-folder ingestion), no activity
+// is recorded since the IMAP-folder origin is implicit context.
+func (m *Manager) MarkAsSpam(uuid string, actor umodels.User) error {
+	if _, err := m.q.MarkAsSpam.Exec(uuid); err != nil {
+		return err
+	}
+	if actor.ID != 0 {
+		if err := m.RecordStatusChange(models.StatusSpam, uuid, actor); err != nil {
+			m.lo.Error("error recording status-change activity for spam", "uuid", uuid, "error", err)
+		}
+	}
+	return nil
+}
+
+// MarkAsNotSpam moves a spam conversation back to open and records who did it.
+func (m *Manager) MarkAsNotSpam(uuid string, actor umodels.User) error {
 	if _, err := m.q.MarkAsNotSpam.Exec(uuid); err != nil {
 		return err
+	}
+	if err := m.RecordStatusChange(models.StatusOpen, uuid, actor); err != nil {
+		m.lo.Error("error recording status-change activity for not-spam", "uuid", uuid, "error", err)
 	}
 	return nil
 }
