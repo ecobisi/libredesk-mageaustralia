@@ -31,10 +31,12 @@ type Manager struct {
 type queries struct {
 	Get            *sqlx.Stmt `query:"get"`
 	GetAll         *sqlx.Stmt `query:"get-all"`
+	GetAllForUser  *sqlx.Stmt `query:"get-all-for-user"`
 	Create         *sqlx.Stmt `query:"create"`
 	Update         *sqlx.Stmt `query:"update"`
 	Delete         *sqlx.Stmt `query:"delete"`
 	IncrUsageCount *sqlx.Stmt `query:"increment-usage-count"`
+	MarkUsed       *sqlx.Stmt `query:"mark-used"`
 }
 
 // Opts contains the dependencies for the macro manager.
@@ -98,6 +100,26 @@ func (m *Manager) GetAll() ([]models.Macro, error) {
 		return nil, envelope.NewError(envelope.GeneralError, m.i18n.Ts("globals.messages.errorFetching", "name", m.i18n.P("globals.terms.macro")), nil)
 	}
 	return macros, nil
+}
+
+// GetAllForUser returns all macros with each row's per-user last_used_at populated.
+// Sorted most-recently-used first (NULLs last), then alphabetically by name.
+func (m *Manager) GetAllForUser(userID int) ([]models.Macro, error) {
+	macros := make([]models.Macro, 0)
+	if err := m.q.GetAllForUser.Select(&macros, userID); err != nil {
+		m.lo.Error("error fetching macros for user", "user_id", userID, "error", err)
+		return nil, envelope.NewError(envelope.GeneralError, m.i18n.Ts("globals.messages.errorFetching", "name", m.i18n.P("globals.terms.macro")), nil)
+	}
+	return macros, nil
+}
+
+// MarkUsed records that a user just applied a macro: bumps last_used_at and use_count.
+func (m *Manager) MarkUsed(userID, macroID int) error {
+	if _, err := m.q.MarkUsed.Exec(userID, macroID); err != nil {
+		m.lo.Error("error marking macro as used", "user_id", userID, "macro_id", macroID, "error", err)
+		return err
+	}
+	return nil
 }
 
 // Delete deletes a macro by ID.

@@ -20,6 +20,7 @@ type Macro struct {
 	UserID         *int            `db:"user_id" json:"user_id,string"`
 	TeamID         *int            `db:"team_id" json:"team_id,string"`
 	UsageCount     int             `db:"usage_count" json:"usage_count"`
+	LastUsedAt     *time.Time      `db:"last_used_at" json:"last_used_at"`
 
 	// Pseudo field (not DB-mapped, populated by handler)
 	Attachments    []medModels.Media `db:"-" json:"attachments"`

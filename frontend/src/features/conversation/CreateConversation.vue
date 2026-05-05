@@ -656,6 +656,7 @@ const createConversation = form.handleSubmit(async (values) => {
     if (conversationUUID !== '' && macro?.id && macro?.actions?.length > 0) {
       try {
         await api.applyMacro(conversationUUID, macro.id, macro.actions)
+        macroStore.markUsedLocal(macro.id)
       } catch (error) {
         emitter.emit(EMITTER_EVENTS.SHOW_TOAST, {
           variant: 'destructive',

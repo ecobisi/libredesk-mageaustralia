@@ -34,6 +34,36 @@ FROM
 ORDER BY
     updated_at DESC;
 
+-- name: get-all-for-user
+SELECT
+    m.id,
+    m.created_at,
+    m.updated_at,
+    m.name,
+    m.actions,
+    m.visibility,
+    m.visible_when,
+    m.message_content,
+    m.user_id,
+    m.team_id,
+    m.usage_count,
+    u.last_used_at
+FROM
+    macros m
+LEFT JOIN
+    macro_user_usage u ON u.macro_id = m.id AND u.user_id = $1
+ORDER BY
+    u.last_used_at DESC NULLS LAST,
+    m.name ASC;
+
+-- name: mark-used
+INSERT INTO macro_user_usage (user_id, macro_id, last_used_at, use_count)
+VALUES ($1, $2, NOW(), 1)
+ON CONFLICT (user_id, macro_id)
+DO UPDATE SET
+    last_used_at = NOW(),
+    use_count = macro_user_usage.use_count + 1;
+
 -- name: create
 INSERT INTO
     macros (name, message_content, user_id, team_id, visibility, visible_when, actions)

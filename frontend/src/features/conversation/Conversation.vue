@@ -235,6 +235,7 @@
 <script setup>
 import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useConversationStore } from '@/stores/conversation'
+import { useMacroStore } from '@/stores/macro'
 import { usePresenceStore } from '@/stores/presence'
 import { useTheme } from '@/composables/useTheme'
 import {
@@ -263,6 +264,7 @@ import { handleHTTPError } from '@/utils/http'
 import { useUserStore } from '@/stores/user'
 
 const conversationStore = useConversationStore()
+const macroStore = useMacroStore()
 const presenceStore = usePresenceStore()
 const userStore = useUserStore()
 const emitter = useEmitter()
@@ -357,6 +359,7 @@ async function executePendingSend() {
     if (send.macroID && send.macroActions.length > 0) {
       try {
         await api.applyMacro(send.uuid, send.macroID, send.macroActions)
+        macroStore.markUsedLocal(send.macroID)
       } catch (_) { /* macro errors are non-fatal */ }
     }
 
