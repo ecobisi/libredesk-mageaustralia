@@ -44,8 +44,8 @@
         <CommandGroup heading="Apply macro">
           <div class="min-h-[400px]">
             <div class="h-[60vh] grid grid-cols-12">
-              <!-- Left Column: Macro List (30%) -->
-              <div class="col-span-4 pr-4 border-r overflow-y-auto h-full">
+              <!-- Left Column: Macro List -->
+              <div class="col-span-5 pr-3 border-r overflow-y-auto h-full">
                 <CommandItem
                   v-for="(macro, index) in macroStore.macroOptions"
                   :key="macro.value"
@@ -53,19 +53,30 @@
                   :data-index="index"
                   @select="handleApplyMacro(macro)"
                   @pointerenter="highlightedMacro = macro"
-                  class="px-3 py-3 rounded cursor-pointer transition-all duration-200 hover:bg-primary/10 hover:"
+                  class="px-3 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-primary/10"
                 >
-                  <div class="flex items-center gap-3">
-                    <Zap size="18" class="shrink-0" />
-                    <span class="text-base truncate w-full break-words whitespace-normal">{{
-                      macro.label
-                    }}</span>
+                  <div class="flex items-center gap-2.5 min-w-0 w-full">
+                    <Zap size="14" class="shrink-0 text-muted-foreground" />
+                    <div class="flex flex-col min-w-0 flex-1">
+                      <span
+                        v-if="macroFolder(macro.label)"
+                        class="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight truncate"
+                      >
+                        {{ macroFolder(macro.label) }}
+                      </span>
+                      <span
+                        class="text-sm font-medium truncate whitespace-nowrap"
+                        :title="macroTitleOnly(macro.label)"
+                      >
+                        {{ macroTitleOnly(macro.label) }}
+                      </span>
+                    </div>
                   </div>
                 </CommandItem>
               </div>
 
-              <!-- Right Column: Macro Details (70%) -->
-              <div class="col-span-8 px-4 overflow-y-auto h-full pb-12">
+              <!-- Right Column: Macro Details -->
+              <div class="col-span-7 px-4 overflow-y-auto h-full pb-12">
                 <div class="space-y-4 text-base">
                   <!-- Reply Preview -->
                   <div v-if="replyContent" class="space-y-2">
@@ -277,6 +288,18 @@ watch([Meta_K, Ctrl_K], ([mac, win]) => {
 })
 
 const highlightedMacro = ref(null)
+
+// Macros are imported with names like "[Folder] Title". Split the folder prefix out
+// so the picker can render it as a small muted label and keep the title on one line.
+const MACRO_FOLDER_RE = /^\[([^\]]+)\]\s*/
+function macroFolder(label) {
+  const m = label?.match(MACRO_FOLDER_RE)
+  return m ? m[1] : ''
+}
+function macroTitleOnly(label) {
+  if (!label) return label
+  return label.replace(MACRO_FOLDER_RE, '') || label
+}
 
 function handleApplyMacro(macro) {
   // Create a deep copy.
