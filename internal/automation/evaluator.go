@@ -124,6 +124,8 @@ func (e *Engine) evaluateRule(rule models.RuleDetail, conversation cmodels.Conve
 		switch rule.Field {
 		case models.ContactEmail:
 			valueToCompare = conversation.Contact.Email.String
+		case models.InboxEmail:
+			valueToCompare = conversation.InboxMail
 		case models.ConversationSubject:
 			valueToCompare = conversation.Subject.String
 		case models.ConversationContent:

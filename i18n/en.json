@@ -451,6 +451,8 @@
   "auth.signInButton": "Sign in",
   "automation.deletionConfirmation": "This action cannot be undone. This will permanently delete this automation rule.",
   "automation.editRule": "Edit rule",
+  "automation.field.fromEmail": "From email",
+  "automation.field.toEmail": "To email",
   "automation.newRule": "New rule",
   "businessHour.deletionConfirmation": "This action cannot be undone. This will permanently delete this business hour.",
   "businessHour.edit": "Edit business hour",
