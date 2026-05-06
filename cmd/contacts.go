@@ -188,6 +188,23 @@ func handleUpdateContact(r *fastglue.Request) error {
 	return r.SendEnvelope(contact)
 }
 
+// handleGetContactConversations returns the list of previous conversations for a contact,
+// powering the "all tickets for this customer" view on the contact detail page.
+func handleGetContactConversations(r *fastglue.Request) error {
+	var (
+		app          = r.Context.(*App)
+		contactID, _ = strconv.Atoi(r.RequestCtx.UserValue("id").(string))
+	)
+	if contactID <= 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.somethingWentWrong"), nil, envelope.InputError)
+	}
+	conversations, err := app.conversation.GetContactPreviousConversations(contactID, 100)
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(conversations)
+}
+
 // handleGetContactNotes returns all notes for a contact.
 func handleGetContactNotes(r *fastglue.Request) error {
 	var (

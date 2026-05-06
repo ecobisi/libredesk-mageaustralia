@@ -588,6 +588,7 @@
   "conversation.sidebar.noPreviousConvo": "No previous conversations",
   "conversation.sidebar.notAvailable": "Not available",
   "conversation.sidebar.previousConvo": "Previous conversations",
+  "conversation.sidebar.previousConvo.count": "{count} conversation | {count} conversations",
   "conversation.sort.newestActivity": "Newest activity",
   "conversation.sort.nextSLATarget": "Next SLA target",
   "conversation.sort.oldestActivity": "Oldest activity",

@@ -506,6 +506,7 @@ const updateAIProvider = (data) => http.put('/api/v1/ai/provider', data, {
   }
 })
 const getContactNotes = (id) => http.get(`/api/v1/contacts/${id}/notes`)
+const getContactConversations = (id) => http.get(`/api/v1/contacts/${id}/conversations`)
 const createContactNote = (id, data) => http.post(`/api/v1/contacts/${id}/notes`, data, {
   headers: {
     'Content-Type': 'application/json'
@@ -739,6 +740,7 @@ export default {
   deleteCustomAttribute,
   getCustomAttribute,
   getContactNotes,
+  getContactConversations,
   createContactNote,
   deleteContactNote,
   getActivityLogs,

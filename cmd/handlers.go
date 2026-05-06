@@ -188,6 +188,7 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	// just a thinner UI on top of the same write permission.
 	g.POST("/api/v1/contacts/quick", perm(handleQuickCreateContact, "contacts:write"))
 	g.PUT("/api/v1/contacts/{id}/block", perm(handleBlockContact, "contacts:block"))
+	g.GET("/api/v1/contacts/{id}/conversations", perm(handleGetContactConversations, "contacts:read"))
 
 	// Contact notes.
 	g.GET("/api/v1/contacts/{id}/notes", perm(handleGetContactNotes, "contact_notes:read"))
