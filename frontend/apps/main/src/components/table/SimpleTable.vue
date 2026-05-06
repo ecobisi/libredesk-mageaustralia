@@ -1,5 +1,9 @@
 <template>
-  <table class="min-w-full table-fixed divide-y divide-border">
+  <!-- table-fixed forced equal-width columns regardless of content. Removed
+    so columns size to their actual content (a 50-char macro name and a 5-char
+    role label no longer get the same allocation). w-full keeps the table
+    spanning its container. -->
+  <table class="min-w-full w-full divide-y divide-border">
     <thead class="bg-muted">
       <tr>
         <th
