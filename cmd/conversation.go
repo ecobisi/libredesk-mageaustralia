@@ -1086,6 +1086,23 @@ func handleMarkAsNotSpam(r *fastglue.Request) error {
 	if err := app.conversation.MarkAsNotSpam(uuid, user); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
+
+	// Best-effort: tell the IMAP server (e.g. Gmail) "this isn't spam" by
+	// moving the most recent incoming message of this conversation back to
+	// INBOX. Async so a slow/dead IMAP server doesn't block the response,
+	// and a failure here doesn't undo the not-spam mark — the agent's UI
+	// is already updated regardless.
+	sourceID, inboxID, err := app.conversation.GetLatestIncomingMessageRef(uuid)
+	if err != nil {
+		app.lo.Warn("could not look up source message for IMAP unspam", "uuid", uuid, "error", err)
+	} else if sourceID != "" {
+		go func() {
+			if err := app.inbox.UnspamIMAPMessage(inboxID, sourceID); err != nil {
+				app.lo.Error("failed to move message out of IMAP spam folder", "error", err, "message_id", sourceID, "inbox_id", inboxID)
+			}
+		}()
+	}
+
 	return r.SendEnvelope(true)
 }
 

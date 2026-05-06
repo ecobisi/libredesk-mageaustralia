@@ -234,6 +234,13 @@ func main() {
 	wsHub.SetConversationStore(conversation)
 	automation.SetConversationStore(conversation)
 
+	// Wire IMAP "not spam" callback. The conversation manager decides when
+	// to rescue an incoming spam-folder message (sender has prior agent
+	// engagement); the inbox manager owns the IMAP socket and issues the
+	// MOVE. Keeping the dependency one-way (conv → callback → inbox) avoids
+	// an import cycle.
+	conversation.IMAPUnspamFunc = inbox.UnspamIMAPMessage
+
 	// Start inboxes.
 	startInboxes(ctx, inbox, conversation, user, conversation.SignAvatarURL)
 

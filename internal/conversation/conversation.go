@@ -86,6 +86,12 @@ type Manager struct {
 	wg                         sync.WaitGroup
 	continuityConfig           ContinuityConfig
 	subjectRefFormat           string
+	// IMAPUnspamFunc, when set, is invoked to issue an IMAP MOVE from the
+	// configured spam folder back to INBOX. Wired in cmd/main.go to the
+	// inbox manager's UnspamIMAPMessage so the conversation package can
+	// trigger a "not spam" signal (Gmail uses these as training input)
+	// without depending on the inbox package directly. nil-safe.
+	IMAPUnspamFunc func(inboxID int, messageID string) error
 }
 
 // WidgetConversationView represents the conversation data for widget clients
@@ -325,10 +331,12 @@ type queries struct {
 	InsertMention *sqlx.Stmt `query:"insert-mention"`
 
 	// Spam and trash queries.
-	AutoTrashResolved  *sqlx.Stmt `query:"auto-trash-old-resolved"`
-	AutoTrashSpam      *sqlx.Stmt `query:"auto-trash-old-spam"`
-	PurgeOldTrash      *sqlx.Stmt `query:"purge-old-trash"`
-	PurgeOldTrashMedia *sqlx.Stmt `query:"purge-old-trash-media"`
+	ContactHasPriorAgentReply *sqlx.Stmt `query:"contact-has-prior-agent-reply"`
+	GetLatestIncomingSourceID *sqlx.Stmt `query:"get-latest-incoming-source-id"`
+	AutoTrashResolved         *sqlx.Stmt `query:"auto-trash-old-resolved"`
+	AutoTrashSpam             *sqlx.Stmt `query:"auto-trash-old-spam"`
+	PurgeOldTrash             *sqlx.Stmt `query:"purge-old-trash"`
+	PurgeOldTrashMedia        *sqlx.Stmt `query:"purge-old-trash-media"`
 
 	// Merge queries.
 	GetConversationsByUUIDs         *sqlx.Stmt `query:"get-conversations-by-uuids"`
@@ -2103,6 +2111,35 @@ func (m *Manager) MarkAsSpam(uuid string, actor umodels.User) error {
 // MarkAsNotSpam moves a spam conversation back to Open.
 func (m *Manager) MarkAsNotSpam(uuid string, actor umodels.User) error {
 	return m.UpdateConversationStatus(uuid, 0, models.StatusOpen, "", actor)
+}
+
+// ContactHasPriorAgentReply reports whether the contact has any prior
+// outgoing agent message across all conversations. Used to suppress the
+// IMAP-folder-based auto-spam classification for senders we've previously
+// engaged with: if an agent has talked to this contact before, don't let
+// a single spam-folder fetch silently bury a new reply.
+func (m *Manager) ContactHasPriorAgentReply(contactID int) (bool, error) {
+	var exists bool
+	if err := m.q.ContactHasPriorAgentReply.Get(&exists, contactID); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// GetLatestIncomingMessageRef returns the IMAP source-id (Message-ID
+// header) and inbox id of the most recent incoming message in a
+// conversation. Used by the manual not-spam handler to drive an IMAP
+// MOVE from the spam folder back to INBOX. Returns ("", 0, sql.ErrNoRows)
+// when no qualifying message exists.
+func (m *Manager) GetLatestIncomingMessageRef(conversationUUID string) (string, int, error) {
+	var row struct {
+		SourceID null.String `db:"source_id"`
+		InboxID  int         `db:"inbox_id"`
+	}
+	if err := m.q.GetLatestIncomingSourceID.Get(&row, conversationUUID); err != nil {
+		return "", 0, err
+	}
+	return row.SourceID.String, row.InboxID, nil
 }
 
 // mergeConversationRow is a lightweight projection used during merge.

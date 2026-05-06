@@ -915,6 +915,34 @@ SELECT EXISTS(
       AND (meta ? 'forwarded_to' OR meta @> '{"from_forward": true}'::jsonb)
 ) AS is_from_forward;
 
+-- name: contact-has-prior-agent-reply
+-- Used by the spam-folder rescue path: if any prior outgoing agent message
+-- exists for this contact, the sender is trusted enough to skip the
+-- isSpamMailbox auto-spam classification (and instead trigger an IMAP
+-- MOVE-back so providers like Gmail learn to deliver to INBOX next time).
+SELECT EXISTS (
+    SELECT 1
+    FROM conversation_messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE c.contact_id = $1
+      AND m.sender_type = 'agent'
+      AND m.type = 'outgoing'
+);
+
+-- name: get-latest-incoming-source-id
+-- Returns the IMAP Message-ID (source_id) and inbox id of the most recent
+-- incoming message for a conversation. Used by the manual "not spam" handler
+-- to drive an IMAP MOVE from the spam folder back to INBOX.
+SELECT m.source_id, c.inbox_id
+FROM conversation_messages m
+JOIN conversations c ON c.id = m.conversation_id
+WHERE c.uuid = $1
+  AND m.type = 'incoming'
+  AND m.source_id IS NOT NULL
+  AND m.source_id != ''
+ORDER BY m.created_at DESC
+LIMIT 1;
+
 -- name: auto-trash-old-resolved
 -- Aged from updated_at so a reopen-and-re-resolve resets the clock.
 UPDATE conversations SET

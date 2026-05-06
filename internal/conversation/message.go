@@ -988,22 +988,51 @@ func (m *Manager) ProcessIncomingMessage(in models.IncomingMessage) (models.Mess
 
 	// Auto-mark as spam when fetched from a junk/spam IMAP folder so automation
 	// runs against the already-classified conversation.
+	//
+	// Rescue exception: if the contact has any prior outgoing agent reply
+	// (across any of their conversations) the sender is trusted. Leave the
+	// conversation Open and best-effort tell the IMAP server "this isn't
+	// spam" by moving the source message back to INBOX — Gmail uses these
+	// MOVEs as training input so future deliveries should bypass spam. On
+	// the lookup error we default to the safer (mark-as-spam) branch so a
+	// transient DB hiccup can't accidentally route untrusted mail to Open.
 	fromSpamFolder := isSpamMailbox(in.MailboxName)
+	rescuedFromSpam := false
 	if fromSpamFolder {
-		systemUser, err := m.userStore.GetSystemUser()
-		if err != nil {
-			m.lo.Error("error fetching system user for spam mark", "uuid", msg.ConversationUUID, "error", err)
-		} else if err := m.MarkAsSpam(msg.ConversationUUID, systemUser); err != nil {
-			m.lo.Error("error marking conversation as spam", "uuid", msg.ConversationUUID, "error", err)
+		knownSender, checkErr := m.ContactHasPriorAgentReply(in.Contact.ID)
+		if checkErr != nil {
+			m.lo.Error("error checking prior agent reply, defaulting to spam classification", "error", checkErr, "contact_id", in.Contact.ID, "uuid", msg.ConversationUUID)
+		}
+		if !knownSender {
+			systemUser, err := m.userStore.GetSystemUser()
+			if err != nil {
+				m.lo.Error("error fetching system user for spam mark", "uuid", msg.ConversationUUID, "error", err)
+			} else if err := m.MarkAsSpam(msg.ConversationUUID, systemUser); err != nil {
+				m.lo.Error("error marking conversation as spam", "uuid", msg.ConversationUUID, "error", err)
+			}
+		} else {
+			rescuedFromSpam = true
+			m.lo.Info("rescued message from spam folder, sender previously engaged by agent", "contact_id", in.Contact.ID, "uuid", msg.ConversationUUID)
+			// Async so a slow/dead IMAP server doesn't stall message processing.
+			if m.IMAPUnspamFunc != nil && msg.SourceID.Valid && msg.SourceID.String != "" {
+				inboxID, sourceID := in.InboxID, msg.SourceID.String
+				go func() {
+					if err := m.IMAPUnspamFunc(inboxID, sourceID); err != nil {
+						m.lo.Error("error moving rescued message out of IMAP spam folder", "error", err, "message_id", sourceID, "inbox_id", inboxID)
+					}
+				}()
+			}
 		}
 	}
 
 	// Notify the assigned agent that the customer has replied. Skips new
 	// conversations (the assignment notification covers those), spam-folder
-	// messages (gated on the folder, not the mark result, so a failed
-	// MarkAsSpam still suppresses the notification), and unassigned
-	// conversations (the helper itself handles that).
-	if !isNewConversation && !fromSpamFolder && msg.SenderType == models.SenderTypeContact {
+	// messages that weren't rescued (gated on the folder, not the mark
+	// result, so a failed MarkAsSpam still suppresses the notification),
+	// and unassigned conversations (the helper itself handles that).
+	// Rescued spam messages DO notify because the conversation is staying
+	// Open as a trusted-sender reply.
+	if !isNewConversation && (!fromSpamFolder || rescuedFromSpam) && msg.SenderType == models.SenderTypeContact {
 		go m.notifyParticipants(msg)
 	}
 
