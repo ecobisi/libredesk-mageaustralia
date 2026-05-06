@@ -104,6 +104,18 @@
       </button>
     </div>
 
+    <!-- UX10: customer reply warning banner — informational (blue), not blocking. -->
+    <div
+      v-if="customerReplyWarning"
+      class="flex items-center gap-2 px-3 py-2 mx-2 mt-2 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 text-sm border border-blue-200 dark:border-blue-800"
+    >
+      <AlertTriangle class="w-4 h-4 shrink-0" />
+      <span class="flex-1">{{ $t('replyBox.customerReply.banner') }}</span>
+      <button @click="dismissCustomerReplyWarning" class="text-blue-600 hover:text-blue-800 dark:hover:text-blue-200">
+        <X class="w-3.5 h-3.5" />
+      </button>
+    </div>
+
     <!--
       EC6: Fullscreen reply editor.
       Sized at 92% width / 88% height to match the Freshdesk-style "almost
@@ -307,6 +319,9 @@ const mentions = ref([])
 const isComposing = ref(false)
 const collisionWarning = ref(false)
 const collisionAgentName = ref('')
+// UX10: separate banner for customer-replied-while-composing (blue, not
+// blocking — purely informational). Agent-vs-agent races stay amber.
+const customerReplyWarning = ref(false)
 const showCollisionConfirm = ref(false)
 let pendingSendAction = null
 
@@ -661,6 +676,7 @@ const processSend = async (skipContactEmailCheck = false, skipMissingTagsCheck =
   isComposing.value = false
   collisionWarning.value = false
   collisionAgentName.value = ''
+  customerReplyWarning.value = false
   isSending.value = false
 }
 
@@ -799,6 +815,12 @@ watch(
   () => {
     clearMediaFiles()
     conversationStore.resetMacro(MACRO_CONTEXT.REPLY)
+    // UX10: clear collision/customer-reply banners on conv switch — the
+    // banners refer to events on the previous conversation, carrying them
+    // over would mislead the agent on the new conversation.
+    collisionWarning.value = false
+    collisionAgentName.value = ''
+    customerReplyWarning.value = false
     // EC14: reset From override on conversation switch. The new
     // conversation may belong to a different inbox with a different
     // alias set; carrying the previous selection over would either
@@ -989,24 +1011,41 @@ function handleRestoreSend (data) {
 
 /**
  * Handles collision detection when a new message arrives while composing.
- * Only triggers for outgoing (agent) replies from other agents on the current conversation.
+ * Two cases:
+ *  - outgoing (agent) reply from another agent → collisionWarning (amber)
+ *  - incoming customer reply → customerReplyWarning (blue, UX10)
+ * Private notes are ignored either way; agents posting notes shouldn't
+ * derail an in-progress reply.
  */
 function handleNewMessageCollision({ conversation_uuid, message }) {
   if (!isComposing.value) return
   if (conversation_uuid !== conversationStore.current?.uuid) return
-  // Only care about outgoing agent replies, not private notes or customer messages.
-  if (message?.type !== 'outgoing' || message?.private) return
-  // Ignore messages from the current user. Fall back to author.id because the
-  // WS-broadcast payload may not carry a top-level sender_id.
-  const senderId = message?.sender_id ?? message?.author?.id
-  if (senderId === userStore.userID) return
+  if (message?.private) return
 
-  collisionWarning.value = true
-  collisionAgentName.value = message?.author?.first_name || message?.sender?.first_name || t('replyBox.collision.anotherAgent')
+  if (message?.type === 'incoming') {
+    // UX10: the customer replied while the agent was composing. Surface a
+    // banner so the agent can scroll down and review before sending into
+    // a thread that's just shifted. Distinct from collisionWarning (amber)
+    // because this isn't an agent-vs-agent race, it's just useful context.
+    customerReplyWarning.value = true
+    return
+  }
+  if (message?.type === 'outgoing') {
+    // Ignore messages from the current user. Fall back to author.id because
+    // the WS-broadcast payload may not carry a top-level sender_id.
+    const senderId = message?.sender_id ?? message?.author?.id
+    if (senderId === userStore.userID) return
+    collisionWarning.value = true
+    collisionAgentName.value = message?.author?.first_name || message?.sender?.first_name || t('replyBox.collision.anotherAgent')
+  }
 }
 
 function dismissCollisionWarning() {
   collisionWarning.value = false
+}
+
+function dismissCustomerReplyWarning() {
+  customerReplyWarning.value = false
 }
 
 function confirmSend() {

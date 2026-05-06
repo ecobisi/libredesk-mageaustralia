@@ -1056,6 +1056,7 @@
   "replyBox.collision.title": "Another agent has replied",
   "replyBox.contactEmailMissing": "Contact email not in recipients",
   "replyBox.contactEmailMissingDescription": "The contact's email ({email}) is not included in to, cc, or bcc. The contact won't receive this reply.",
+  "replyBox.customerReply.banner": "The customer sent a new message while you were composing. Scroll down to review before sending.",
   "replyBox.deleteDraft": "Delete draft",
   "replyBox.draftDeleted": "Draft deleted",
   "replyBox.duplicateMessage": "This message was just sent. Refresh if you don't see it yet.",
