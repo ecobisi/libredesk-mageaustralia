@@ -30,7 +30,24 @@
           <span v-if="otherViewers.length > 3" class="text-[10px] text-muted-foreground">+{{ otherViewers.length - 3 }}</span>
         </div>
       </div>
-      <div class="flex items-center">
+      <div class="flex items-center gap-1">
+        <!--
+          UX3: Quick-Close button alongside the status pill. Saves the
+          extra click of opening the status dropdown for the most common
+          terminal transition. Hidden once the conversation is already
+          Closed or Trashed (Trashed is a fork-only status set via the
+          More-actions menu below; checking by name keeps the v1.0.3
+          source semantics).
+        -->
+        <Button
+          v-if="!conversationStore.conversation.loading && conversationStore.current?.status !== 'Closed' && conversationStore.current?.status !== 'Trashed'"
+          variant="outline"
+          size="sm"
+          class="h-7 text-xs"
+          @click="handleUpdateStatus(CONVERSATION_DEFAULT_STATUSES.CLOSED)"
+        >
+          {{ t('globals.messages.close') }}
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger>
             <div
