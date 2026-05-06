@@ -12,6 +12,8 @@ import MessageCache from '../utils/conversation-message-cache'
 import { getI18n } from '../i18n'
 import { useDebounceFn, useStorage } from '@vueuse/core'
 import { CONVERSATION_LIST_TYPE, CONVERSATION_DEFAULT_STATUSES } from '@/constants/conversation'
+import { useUsersStore } from './users'
+import { useTeamStore } from './team'
 import api from '../api'
 
 export const useConversationStore = defineStore('conversation', () => {
@@ -986,15 +988,43 @@ export const useConversationStore = defineStore('conversation', () => {
     incrementMessageVersion()
   }
 
+  // Resolve assignee names from local stores when an assignment WebSocket
+  // update arrives. Backend broadcasts only the ID (assigned_user_id /
+  // assigned_team_id) — without this lookup the *_name fields stay stale and
+  // the list/header keep showing the previous assignee's name. Ported from
+  // v1.0.3 c4c048d3 and adapted for v2's deep-merge update payload.
+  function resolveAssignmentNames (target, update) {
+    if ('assigned_user_id' in update) {
+      if (update.assigned_user_id) {
+        const usersStore = useUsersStore()
+        const user = usersStore.options.find(u => String(u.value) === String(update.assigned_user_id))
+        if (user) target.assigned_user_name = user.label
+      } else {
+        target.assigned_user_name = null
+      }
+    }
+    if ('assigned_team_id' in update) {
+      if (update.assigned_team_id) {
+        const teamStore = useTeamStore()
+        const team = teamStore.options.find(t => String(t.value) === String(update.assigned_team_id))
+        if (team) target.assigned_team_name = team.label
+      } else {
+        target.assigned_team_name = null
+      }
+    }
+  }
+
   function mergeConversationUpdate (update) {
     if (conversation.data?.uuid === update.uuid) {
       deepMerge(conversation.data, update)
+      resolveAssignmentNames(conversation.data, update)
     }
     const existing = conversations?.data?.find(c => c.uuid === update.uuid)
     if (existing) {
       const oldStatus = existing.status
       const oldAssignedUserId = existing.assigned_user_id
       deepMerge(existing, update)
+      resolveAssignmentNames(existing, update)
 
       // Prune the row from the list when the change makes it no longer match the
       // current filter. Mirrors v1.0.3 behaviour from f072968b: agent status/
