@@ -784,6 +784,7 @@
   "globals.terms.closed": "Closed",
   "globals.terms.closedAt": "Closed at",
   "globals.terms.collapse": "Collapse",
+  "globals.terms.color": "Color",
   "globals.terms.contact": "Contact | Contacts",
   "globals.terms.content": "Content | Contents",
   "globals.terms.contextLink": "Context link | Context links",

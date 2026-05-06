@@ -39,11 +39,12 @@ type Opts struct {
 
 // queries contains prepared SQL queries.
 type queries struct {
-	GetStatus      *sqlx.Stmt `query:"get-status"`
-	GetAllStatuses *sqlx.Stmt `query:"get-all-statuses"`
-	InsertStatus   *sqlx.Stmt `query:"insert-status"`
-	DeleteStatus   *sqlx.Stmt `query:"delete-status"`
-	UpdateStatus   *sqlx.Stmt `query:"update-status"`
+	GetStatus         *sqlx.Stmt `query:"get-status"`
+	GetAllStatuses    *sqlx.Stmt `query:"get-all-statuses"`
+	InsertStatus      *sqlx.Stmt `query:"insert-status"`
+	DeleteStatus      *sqlx.Stmt `query:"delete-status"`
+	UpdateStatus      *sqlx.Stmt `query:"update-status"`
+	UpdateStatusColor *sqlx.Stmt `query:"update-status-color"`
 }
 
 // New creates and returns a new instance of the Manager.
@@ -69,8 +70,9 @@ func (m *Manager) GetAll() ([]models.Status, error) {
 	return statuses, nil
 }
 
-// Create creates a new status.
-func (m *Manager) Create(name, category string) (models.Status, error) {
+// Create creates a new status. An empty color defaults to "gray" so older
+// API clients that pre-date the colour picker still produce valid rows.
+func (m *Manager) Create(name, category, color string) (models.Status, error) {
 	var status models.Status
 	if err := m.validateStatusName(name); err != nil {
 		return status, err
@@ -78,7 +80,10 @@ func (m *Manager) Create(name, category string) (models.Status, error) {
 	if err := m.validateCategory(category); err != nil {
 		return status, err
 	}
-	if err := m.q.InsertStatus.Get(&status, name, category); err != nil {
+	if color == "" {
+		color = "gray"
+	}
+	if err := m.q.InsertStatus.Get(&status, name, category, color); err != nil {
 		m.lo.Error("error inserting status", "error", err)
 		return status, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 	}
@@ -108,7 +113,7 @@ func (m *Manager) Delete(id int) error {
 }
 
 // Update updates a status by id.
-func (m *Manager) Update(id int, name, category string) (models.Status, error) {
+func (m *Manager) Update(id int, name, category, color string) (models.Status, error) {
 	var updatedStatus models.Status
 	if err := m.validateStatusName(name); err != nil {
 		return updatedStatus, err
@@ -125,11 +130,29 @@ func (m *Manager) Update(id int, name, category string) (models.Status, error) {
 		return updatedStatus, envelope.NewError(envelope.InputError, m.i18n.T("conversationStatus.cannotUpdateDefault"), nil)
 	}
 
-	if err := m.q.UpdateStatus.Get(&updatedStatus, id, name, category); err != nil {
+	if color == "" {
+		color = "gray"
+	}
+	if err := m.q.UpdateStatus.Get(&updatedStatus, id, name, category, color); err != nil {
 		m.lo.Error("error updating status", "error", err)
 		return updatedStatus, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 	}
 	return updatedStatus, nil
+}
+
+// UpdateColor updates only the colour of a status. Used by the inline picker
+// in the admin status list, where renaming/category change isn't desired.
+// Default-named statuses (Open / Snoozed / Resolved / Closed) are intentionally
+// allowed here, since only the colour changes and the protected name/category stay put.
+func (m *Manager) UpdateColor(id int, color string) error {
+	if color == "" {
+		color = "gray"
+	}
+	if _, err := m.q.UpdateStatusColor.Exec(id, color); err != nil {
+		m.lo.Error("error updating status color", "id", id, "error", err)
+		return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	return nil
 }
 
 // Get retrieves a status by ID.

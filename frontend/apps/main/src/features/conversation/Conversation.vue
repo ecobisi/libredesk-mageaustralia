@@ -12,10 +12,11 @@
         <DropdownMenu>
           <DropdownMenuTrigger>
             <div
-              class="flex items-center space-x-1 cursor-pointer bg-primary px-2 py-1 rounded text-sm"
+              class="flex items-center space-x-1 cursor-pointer px-2 py-1 rounded text-sm font-medium"
+              :style="currentStatusStyle"
               v-if="!conversationStore.conversation.loading"
             >
-              <span class="text-secondary font-medium inline-block">
+              <span class="font-medium inline-block">
                 {{ conversationStore.current?.status }}
               </span>
             </div>
@@ -43,6 +44,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useConversationStore } from '../../stores/conversation'
 import {
   DropdownMenu,
@@ -54,10 +56,21 @@ import MessageList from '@/features/conversation/message/MessageList.vue'
 import ReplyBox from './ReplyBox.vue'
 import { EMITTER_EVENTS } from '../../constants/emitterEvents.js'
 import { CONVERSATION_DEFAULT_STATUSES } from '../../constants/conversation'
+import { statusColorStyle } from '../../constants/statusColors'
 import { useEmitter } from '../../composables/useEmitter'
 import { Skeleton } from '@shared-ui/components/ui/skeleton'
 const conversationStore = useConversationStore()
 const emitter = useEmitter()
+
+// Match the pill colour to the configured status colour (FS17). Falls back
+// to gray when the status row hasn't loaded yet or when the conversation's
+// status name doesn't match any known row.
+const currentStatusStyle = computed(() => {
+  const name = conversationStore.current?.status
+  if (!name) return statusColorStyle(undefined)
+  const match = (conversationStore.statuses || []).find(s => s.name === name)
+  return statusColorStyle(match?.color)
+})
 
 const handleUpdateStatus = (status) => {
   if (status === CONVERSATION_DEFAULT_STATUSES.SNOOZED) {

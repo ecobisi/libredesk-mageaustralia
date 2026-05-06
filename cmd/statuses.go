@@ -33,7 +33,7 @@ func handleCreateStatus(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.empty", "name", "`name`"), nil, envelope.InputError)
 	}
 
-	createdStatus, err := app.status.Create(status.Name, status.Category)
+	createdStatus, err := app.status.Create(status.Name, status.Category, status.Color)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
@@ -74,10 +74,34 @@ func handleUpdateStatus(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.empty", "name", "`name`"), nil, envelope.InputError)
 	}
 
-	updatedStatus, err := app.status.Update(id, status.Name, status.Category)
+	updatedStatus, err := app.status.Update(id, status.Name, status.Category, status.Color)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 
 	return r.SendEnvelope(updatedStatus)
+}
+
+// handleUpdateStatusColor updates only the colour of a status. Separate route
+// from the full update so the inline colour picker in the admin status list
+// can re-colour a default status (Open/Snoozed/Resolved/Closed) without hitting
+// the "cannot update default status" guard on the full UpdateStatus path.
+func handleUpdateStatusColor(r *fastglue.Request) error {
+	var (
+		app = r.Context.(*App)
+		req struct {
+			Color string `json:"color"`
+		}
+	)
+	id, err := strconv.Atoi(r.RequestCtx.UserValue("id").(string))
+	if err != nil || id <= 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.somethingWentWrong"), nil, envelope.InputError)
+	}
+	if err := r.Decode(&req, "json"); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("errors.parsingRequest"), err.Error(), envelope.InputError)
+	}
+	if err := app.status.UpdateColor(id, req.Color); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(true)
 }

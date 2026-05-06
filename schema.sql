@@ -192,7 +192,11 @@ CREATE TABLE conversation_statuses (
 	created_at TIMESTAMPTZ DEFAULT NOW(),
 	updated_at TIMESTAMPTZ DEFAULT NOW(),
 	"name" TEXT NOT NULL UNIQUE,
-	category conversation_status_category NOT NULL DEFAULT 'open'
+	category conversation_status_category NOT NULL DEFAULT 'open',
+	-- Tailwind-derived palette key (gray, red, orange, amber, yellow, lime,
+	-- green, teal, cyan, blue, indigo, purple, pink, rose, slate). Stored as
+	-- TEXT rather than ENUM so palette tweaks don't need a schema migration.
+	color TEXT NOT NULL DEFAULT 'gray'
 );
 
 DROP TABLE IF EXISTS conversation_priorities CASCADE;
@@ -751,14 +755,17 @@ INSERT INTO conversation_priorities (name) VALUES
 ('Medium'),
 ('High');
 
--- Default conversation statuses
-INSERT INTO conversation_statuses (name, category) VALUES
-('Open', 'open'),
-('Snoozed', 'waiting'),
-('Resolved', 'resolved'),
-('Closed', 'resolved'),
-('Spam', 'spam'),
-('Trashed', 'trashed');
+-- Default conversation statuses. Colour matches the previous hardcoded
+-- frontend palette (orange = active work, purple = waiting, green = done,
+-- gray = archived) so existing installs see the same pill colours after
+-- the column is added.
+INSERT INTO conversation_statuses (name, category, color) VALUES
+('Open', 'open', 'orange'),
+('Snoozed', 'waiting', 'purple'),
+('Resolved', 'resolved', 'green'),
+('Closed', 'resolved', 'gray'),
+('Spam', 'spam', 'gray'),
+('Trashed', 'trashed', 'gray');
 
 -- Default roles
 INSERT INTO

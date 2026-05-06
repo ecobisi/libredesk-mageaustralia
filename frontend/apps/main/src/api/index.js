@@ -71,6 +71,7 @@ const getPriorities = () => http.get('/api/v1/priorities')
 const getStatuses = () => http.get('/api/v1/statuses')
 const createStatus = (data) => http.post('/api/v1/statuses', data)
 const updateStatus = (id, data) => http.put(`/api/v1/statuses/${id}`, data)
+const updateStatusColor = (id, color) => http.put(`/api/v1/statuses/${id}/color`, { color })
 const deleteStatus = (id) => http.delete(`/api/v1/statuses/${id}`)
 const createTag = (data) => http.post('/api/v1/tags', data)
 const updateTag = (id, data) => http.put(`/api/v1/tags/${id}`, data)
@@ -671,6 +672,7 @@ export default {
   getPriorities,
   createStatus,
   updateStatus,
+  updateStatusColor,
   deleteStatus,
   getTeamsCompact,
   getUsersCompact,

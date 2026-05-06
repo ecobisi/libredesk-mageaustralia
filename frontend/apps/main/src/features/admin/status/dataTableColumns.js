@@ -1,5 +1,6 @@
 import { h } from 'vue'
 import dropdown from './dataTableDropdown.vue'
+import StatusColorPicker from './StatusColorPicker.vue'
 import { format } from 'date-fns'
 import { CONVERSATION_DEFAULT_STATUSES_LIST } from '@/constants/conversation.js'
 
@@ -37,6 +38,24 @@ export const createColumns = (t, { onEdit } = {}) => [
     },
     cell: function ({ row }) {
       return h('div', { class: 'text-center' }, t(`globals.terms.${row.getValue('category')}`))
+    }
+  },
+  {
+    accessorKey: 'color',
+    enableSorting: false,
+    header: function () {
+      return h('div', { class: 'text-center' }, t('globals.terms.color'))
+    },
+    cell: function ({ row }) {
+      // Inline colour picker so admins can recolour any status (including
+      // the four default ones) without going through the edit dialog,
+      // which is locked for defaults.
+      return h('div', { class: 'flex justify-center' },
+        h(StatusColorPicker, {
+          statusId: row.original.id,
+          color: row.getValue('color') || 'gray'
+        })
+      )
     }
   },
   {

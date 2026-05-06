@@ -133,7 +133,11 @@
 
         <!-- Status -->
         <TableCell class="px-2 py-2">
-          <span class="text-xs text-muted-foreground truncate">
+          <span
+            v-if="conversation.status"
+            class="text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
+            :style="getStatusStyle(conversation.status)"
+          >
             {{ conversation.status }}
           </span>
         </TableCell>
@@ -174,6 +178,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@share
 import { getRelativeTime } from '@shared-ui/utils/datetime.js'
 import { useConversationStore } from '@/stores/conversation'
 import { useConversationRoute } from '@/composables/useConversationRoute'
+import { statusColorStyle } from '@/constants/statusColors'
 
 const { t } = useI18n()
 const conversationStore = useConversationStore()
@@ -265,6 +270,16 @@ const PREVIEW_MAX = 300
 const truncatePreview = (text) => {
   const s = text || ''
   return s.length > PREVIEW_MAX ? s.slice(0, PREVIEW_MAX) + '...' : s
+}
+
+// Look up the colour key from the loaded statuses (fetched once in
+// stores/conversation.js#fetchStatuses) and resolve it to inline styles.
+// Falls back to gray when the conversation's status name doesn't match
+// a known status row (e.g. a status was renamed mid-flight).
+const getStatusStyle = (statusName) => {
+  const statuses = conversationStore.statuses || []
+  const match = statuses.find(s => s.name === statusName)
+  return statusColorStyle(match?.color)
 }
 
 const priorityDotClass = (priority) => {
