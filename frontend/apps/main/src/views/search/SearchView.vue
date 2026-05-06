@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col h-screen">
-    <SearchHeader v-model="searchQuery" @search="handleSearch" />
+    <SearchHeader ref="searchHeader" v-model="searchQuery" @search="handleSearch" />
     <div class="flex-1 overflow-y-auto">
       <!-- Spinner only on initial fetch — subsequent paginated loads render
            the existing list and an inline spinner on the load-more button. -->
@@ -60,6 +60,7 @@
 
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
 import { handleHTTPError } from '@shared-ui/utils/http.js'
 import { Button } from '@shared-ui/components/ui/button'
 import SearchHeader from '@/features/search/SearchHeader.vue'
@@ -160,6 +161,31 @@ watch(searchQuery, (newValue) => {
     searchPerformed.value = false
   }
 })
+
+// FS14: When the sidebar's search icon is clicked while we're already on the
+// search route, it clears sessionStorage and pushes a timestamped query.
+// Watch the route so the in-memory state (which was hydrated from
+// sessionStorage at mount) gets cleared too, otherwise the user sees their
+// previous results until they start typing. Also refocus the input, since
+// the component isn't remounted on a same-route nav so SearchHeader's
+// onMounted focus doesn't fire.
+const route = useRoute()
+const searchHeader = ref(null)
+watch(
+  () => route.fullPath,
+  () => {
+    if (route.name === 'search' && !sessionStorage.getItem('searchQuery')) {
+      clearTimeout(debounceTimer)
+      searchQuery.value = ''
+      results.value = []
+      total.value = 0
+      page.value = 1
+      searchPerformed.value = false
+      error.value = null
+      searchHeader.value?.focus?.()
+    }
+  }
+)
 
 onBeforeUnmount(() => {
   clearTimeout(debounceTimer)

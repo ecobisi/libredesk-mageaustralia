@@ -31,17 +31,22 @@ const { t } = useI18n()
 // a real <input> element; if the ref unwraps to the wrapper, we fall back to
 // querying the underlying input.
 const searchInput = ref(null)
+const focusInput = () => {
+  const el = searchInput.value?.$el ?? searchInput.value
+  if (!el) return
+  if (typeof el.focus === 'function') {
+    el.focus()
+    return
+  }
+  el.querySelector?.('input')?.focus()
+}
 onMounted(() => {
-  nextTick(() => {
-    const el = searchInput.value?.$el ?? searchInput.value
-    if (!el) return
-    if (typeof el.focus === 'function') {
-      el.focus()
-      return
-    }
-    el.querySelector?.('input')?.focus()
-  })
+  nextTick(focusInput)
 })
+
+// FS14: Exposed so SearchView can refocus the input after the sidebar's
+// search icon clears state on a same-route navigation (no remount).
+defineExpose({ focus: focusInput })
 </script>
 
 <style scoped>

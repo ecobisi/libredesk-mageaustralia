@@ -150,6 +150,23 @@ const handleDeleteView = () => {
   }
 }
 
+// FS14: Clicking the search icon clears the previous search session state
+// (FS8 persists searchQuery / searchResults / searchTotal across navigation
+// for back-button continuity), then routes to /search. SearchView watches
+// the route and resets local state when sessionStorage has been emptied.
+// If the user is already on the search page, attach a timestamp query so
+// vue-router still triggers the route watcher.
+const goToSearch = () => {
+  sessionStorage.removeItem('searchQuery')
+  sessionStorage.removeItem('searchResults')
+  sessionStorage.removeItem('searchTotal')
+  if (route.name === 'search') {
+    router.push({ name: 'search', query: { t: Date.now() } })
+  } else {
+    router.push({ name: 'search' })
+  }
+}
+
 // Navigation methods with conversation retention.
 // In card mode the conversation pane is always visible so retaining the open
 // conversation across inbox switches is fine. In table mode the layout shows
@@ -424,9 +441,14 @@ const viewToDelete = ref(null)
                   <span>{{ t('globals.terms.inbox') }}</span>
                 </div>
                 <div class="mr-1 mt-1 transition-colors">
-                  <router-link :to="{ name: 'search' }">
+                  <button
+                    type="button"
+                    class="cursor-pointer"
+                    :aria-label="t('globals.terms.search')"
+                    @click="goToSearch"
+                  >
                     <Search size="18" stroke-width="2.5" class="text-muted-foreground hover:text-foreground" />
-                  </router-link>
+                  </button>
                 </div>
               </div>
             </SidebarMenuItem>
