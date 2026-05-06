@@ -28,11 +28,15 @@ export const THEMES = [DEFAULT_THEME, ...discovered]
 
 const STORAGE_KEY = 'libredesk-theme'
 const DEFAULT_ID = DEFAULT_THEME.id
+// New users land on Fresh if it's available; existing users keep whatever
+// they last selected. Falls back to the upstream default if the Fresh theme
+// directory has been removed.
+const INITIAL_ID = THEMES.some((t) => t.id === 'fresh') ? 'fresh' : DEFAULT_ID
 
 const isValid = (id) => THEMES.some((t) => t.id === id)
 
 export function useTheme () {
-  const stored = useStorage(STORAGE_KEY, DEFAULT_ID)
+  const stored = useStorage(STORAGE_KEY, INITIAL_ID)
   const activeTheme = computed(() => (isValid(stored.value) ? stored.value : DEFAULT_ID))
 
   // Reflect the active theme on <html data-theme="..."> so themes can opt in
