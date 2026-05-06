@@ -43,7 +43,7 @@
         {{ conversation?.contact?.first_name + ' ' + conversation?.contact?.last_name }}
       </span>
     </div>
-    <div class="flex gap-2 items-center">
+    <div class="flex gap-2 items-center group/email">
       <Mail size="16" class="text-muted-foreground flex-shrink-0" />
       <Tooltip v-if="isLivechat && !conversationStore.conversation.loading">
         <TooltipTrigger as-child>
@@ -63,6 +63,18 @@
       <span v-else class="sidebar-label">
         {{ t('conversation.sidebar.notAvailable') }}
       </span>
+      <!-- UX10: copy-to-clipboard, hover to reveal. Hidden once the conversation
+        is loading or the contact has no email. -->
+      <button
+        v-if="!conversationStore.conversation.loading && conversation?.contact?.email"
+        type="button"
+        class="flex-shrink-0 opacity-0 group-hover/email:opacity-100 focus:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+        @click="copyEmail"
+        :title="emailCopied ? t('contact.emailCopied') : t('contact.copyEmail')"
+      >
+        <ClipboardCheck v-if="emailCopied" :size="14" class="text-green-500" />
+        <Copy v-else :size="14" />
+      </button>
     </div>
     <div class="flex gap-2 items-center">
       <Phone size="16" class="text-muted-foreground flex-shrink-0" />
@@ -134,7 +146,9 @@ import {
   Monitor,
   Smartphone,
   ShieldCheck,
-  ShieldQuestion
+  ShieldQuestion,
+  Copy,
+  ClipboardCheck
 } from 'lucide-vue-next'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@shared-ui/components/ui/tooltip'
 import countries from '@/constants/countries.js'
@@ -150,6 +164,25 @@ const emitter = useEmitter()
 const conversation = computed(() => conversationStore.current)
 const { t } = useI18n()
 const userStore = useUserStore()
+
+// UX10: copy contact email to clipboard. Reverts the icon back to Copy after
+// 2s. navigator.clipboard.writeText needs an HTTPS context, but the staging /
+// production deployments are both HTTPS so we don't fall back to execCommand.
+const emailCopied = ref(false)
+const copyEmail = async () => {
+  const email = conversation.value?.contact?.email
+  if (!email) return
+  try {
+    await navigator.clipboard.writeText(email)
+    emailCopied.value = true
+    setTimeout(() => { emailCopied.value = false }, 2000)
+  } catch {
+    emitter.emit(EMITTER_EVENTS.SHOW_TOAST, {
+      variant: 'destructive',
+      description: t('contact.emailCopyFailed')
+    })
+  }
+}
 
 const phoneNumber = computed(() => {
   const countryCodeValue = conversation.value?.contact?.phone_number_country_code || ''
