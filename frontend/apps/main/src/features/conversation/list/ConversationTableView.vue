@@ -132,9 +132,31 @@
         </TableCell>
 
         <!-- Status -->
-        <TableCell class="px-2 py-2">
+        <TableCell class="px-2 py-2" @click.stop>
+          <DropdownMenu v-if="conversation.status && canUpdateStatus">
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                class="text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap inline-flex items-center gap-0.5 cursor-pointer"
+                :style="getStatusStyle(conversation.status)"
+              >
+                {{ conversation.status }}
+                <ChevronDown class="w-2.5 h-2.5 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" class="max-h-96 overflow-y-auto">
+              <DropdownMenuItem
+                v-for="status in conversationStore.statusOptionsNoSnooze"
+                :key="'status-' + status.value"
+                @click="updateStatus(conversation, status.label)"
+                class="text-xs"
+              >
+                {{ status.label }}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <span
-            v-if="conversation.status"
+            v-else-if="conversation.status"
             class="text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
             :style="getStatusStyle(conversation.status)"
           >
@@ -143,12 +165,41 @@
         </TableCell>
 
         <!-- Priority -->
-        <TableCell class="px-2 py-2">
-          <div class="flex items-center gap-1.5">
+        <TableCell class="px-2 py-2" @click.stop>
+          <DropdownMenu v-if="canUpdatePriority">
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                class="text-xs flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer whitespace-nowrap text-muted-foreground"
+              >
+                <span
+                  class="w-2 h-2 rounded-full shrink-0"
+                  :class="priorityDotClass(conversation.priority)"
+                />
+                <span class="truncate">{{ conversation.priority || '—' }}</span>
+                <ChevronDown class="w-2.5 h-2.5 opacity-50 shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                v-for="priority in conversationStore.priorityOptions"
+                :key="'priority-' + priority.value"
+                @click="updatePriority(conversation, priority.label)"
+                class="text-xs"
+              >
+                <span
+                  class="w-2 h-2 rounded-full mr-2"
+                  :class="priorityDotClass(priority.label)"
+                />
+                {{ priority.label }}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <div v-else class="flex items-center gap-1.5">
             <span
               class="w-2 h-2 rounded-full shrink-0"
               :class="priorityDotClass(conversation.priority)"
-            ></span>
+            />
             <span class="text-xs text-muted-foreground truncate">
               {{ conversation.priority || '—' }}
             </span>
@@ -167,23 +218,39 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useStorage } from '@vueuse/core'
+import { ChevronDown } from 'lucide-vue-next'
 import { Avatar, AvatarFallback, AvatarImage } from '@shared-ui/components/ui/avatar'
 import { Checkbox } from '@shared-ui/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@shared-ui/components/ui/dropdown-menu'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@shared-ui/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@shared-ui/components/ui/tooltip'
 import { getRelativeTime } from '@shared-ui/utils/datetime.js'
 import { useConversationStore } from '@/stores/conversation'
+import { useUserStore } from '@/stores/user'
 import { useConversationRoute } from '@/composables/useConversationRoute'
+import { useToast } from '@/composables/useToast'
+import { permissions as p } from '@/constants/permissions'
 import { statusColorStyle } from '@/constants/statusColors'
+import api from '@/api'
 
 const { t } = useI18n()
 const conversationStore = useConversationStore()
+const userStore = useUserStore()
 const router = useRouter()
+const toast = useToast()
 const { buildConversationRoute } = useConversationRoute()
+
+const canUpdateStatus = computed(() => userStore.can(p.CONVERSATIONS_UPDATE_STATUS))
+const canUpdatePriority = computed(() => userStore.can(p.CONVERSATIONS_UPDATE_PRIORITY))
 
 const now = ref(new Date())
 let timer = null
@@ -294,5 +361,23 @@ const priorityDotClass = (priority) => {
 
 const onRowClick = (conversation) => {
   router.push(buildConversationRoute(conversation))
+}
+
+const updateStatus = async (conversation, status) => {
+  try {
+    await api.updateConversationStatus(conversation.uuid, { status })
+    conversationStore.updateConversationField(conversation.uuid, 'status', status)
+  } catch (error) {
+    toast.error(error)
+  }
+}
+
+const updatePriority = async (conversation, priority) => {
+  try {
+    await api.updateConversationPriority(conversation.uuid, { priority })
+    conversationStore.updateConversationField(conversation.uuid, 'priority', priority)
+  } catch (error) {
+    toast.error(error)
+  }
 }
 </script>

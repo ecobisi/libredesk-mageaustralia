@@ -48,14 +48,64 @@
                     {{ conversation.inbox_name }}
                   </span>
                 </div>
-                <div class="flex items-center gap-1.5 shrink-0">
+                <div class="flex items-center gap-1.5 shrink-0" @click.prevent.stop>
+                  <!-- Status pill: dropdown when user can update, otherwise plain pill. -->
+                  <DropdownMenu v-if="conversation.status && canUpdateStatus">
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        class="text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap inline-flex items-center gap-0.5 cursor-pointer"
+                        :style="getStatusStyle(conversation.status)"
+                      >
+                        {{ conversation.status }}
+                        <ChevronDown class="w-2.5 h-2.5 opacity-60" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" class="max-h-96 overflow-y-auto">
+                      <DropdownMenuItem
+                        v-for="status in conversationStore.statusOptionsNoSnooze"
+                        :key="'status-' + status.value"
+                        @click="updateStatus(status.label)"
+                        class="text-xs"
+                      >
+                        {{ status.label }}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <span
-                    v-if="conversation.status"
+                    v-else-if="conversation.status"
                     class="text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
                     :style="getStatusStyle(conversation.status)"
                   >{{ conversation.status }}</span>
+
+                  <!-- Priority dot: dropdown when user can update, otherwise plain dot. -->
+                  <DropdownMenu v-if="canUpdatePriority">
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        class="w-2 h-2 rounded-full cursor-pointer"
+                        :class="priorityDotClass(conversation.priority)"
+                        :title="conversation.priority || t('globals.terms.priority', 1)"
+                        :aria-label="conversation.priority || t('globals.terms.priority', 1)"
+                      />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        v-for="priority in conversationStore.priorityOptions"
+                        :key="'priority-' + priority.value"
+                        @click="updatePriority(priority.label)"
+                        class="text-xs"
+                      >
+                        <span
+                          class="w-2 h-2 rounded-full mr-2"
+                          :class="priorityDotClass(priority.label)"
+                        />
+                        {{ priority.label }}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <span
-                    v-if="conversation.priority"
+                    v-else-if="conversation.priority"
                     class="w-2 h-2 rounded-full"
                     :class="priorityDotClass(conversation.priority)"
                     :title="conversation.priority"
@@ -369,6 +419,8 @@ const handleCheckboxClick = (event) => {
 
 const canAssignAgent = computed(() => userStore.can(p.CONVERSATIONS_UPDATE_USER_ASSIGNEE))
 const canAssignTeam = computed(() => userStore.can(p.CONVERSATIONS_UPDATE_TEAM_ASSIGNEE))
+const canUpdateStatus = computed(() => userStore.can(p.CONVERSATIONS_UPDATE_STATUS))
+const canUpdatePriority = computed(() => userStore.can(p.CONVERSATIONS_UPDATE_PRIORITY))
 
 // Resolve status name to admin-configured colour (FS17). Falls back to gray
 // when the status name doesn't match a loaded status row.
@@ -418,6 +470,24 @@ const unassignTeam = async () => {
   try {
     await api.removeAssignee(props.conversation.uuid, 'team')
     conversationStore.updateConversationField(props.conversation.uuid, 'assigned_team_name', null)
+  } catch (error) {
+    toast.error(error)
+  }
+}
+
+const updateStatus = async (status) => {
+  try {
+    await api.updateConversationStatus(props.conversation.uuid, { status })
+    conversationStore.updateConversationField(props.conversation.uuid, 'status', status)
+  } catch (error) {
+    toast.error(error)
+  }
+}
+
+const updatePriority = async (priority) => {
+  try {
+    await api.updateConversationPriority(props.conversation.uuid, { priority })
+    conversationStore.updateConversationField(props.conversation.uuid, 'priority', priority)
   } catch (error) {
     toast.error(error)
   }
