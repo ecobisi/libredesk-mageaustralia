@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	medModels "github.com/abhinavxd/libredesk/internal/media/models"
 	"github.com/lib/pq"
 )
 
@@ -19,4 +20,8 @@ type Macro struct {
 	UserID         *int            `db:"user_id" json:"user_id,string"`
 	TeamID         *int            `db:"team_id" json:"team_id,string"`
 	UsageCount     int             `db:"usage_count" json:"usage_count"`
+
+	// Pseudo field — not DB-mapped, populated by the macro handler from the
+	// polymorphic media table (model_type='macros').
+	Attachments []medModels.Media `db:"-" json:"attachments"`
 }

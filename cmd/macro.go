@@ -9,9 +9,19 @@ import (
 	autoModels "github.com/abhinavxd/libredesk/internal/automation/models"
 	"github.com/abhinavxd/libredesk/internal/envelope"
 	"github.com/abhinavxd/libredesk/internal/macro/models"
+	mmodels "github.com/abhinavxd/libredesk/internal/media/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
+
+// macroRequest wraps a macro with an optional attachments list (media IDs).
+// Attachments are uploaded separately via the /media endpoint with linked_model
+// set to 'macros'; the resulting media IDs are then submitted here so the
+// macro handler can Attach() them after the macro itself is created/updated.
+type macroRequest struct {
+	models.Macro
+	AttachmentIDs []int `json:"attachment_ids"`
+}
 
 // handleGetMacros returns all macros.
 func handleGetMacros(r *fastglue.Request) error {
@@ -34,6 +44,10 @@ func handleGetMacros(r *fastglue.Request) error {
 			app.lo.Error("error marshalling macro actions", "macro_id", m.ID, "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, app.i18n.T("globals.messages.somethingWentWrong"), nil, envelope.GeneralError)
 		}
+		// Attachments are stored polymorphically in the media table; populate
+		// inline so the picker can show paperclip indicators without a second
+		// round trip per macro.
+		macros[i].Attachments = populateMacroAttachments(app, macros[i].ID)
 	}
 	return r.SendEnvelope(macros)
 }
@@ -67,37 +81,50 @@ func handleGetMacro(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, app.i18n.T("globals.messages.somethingWentWrong"), nil, envelope.GeneralError)
 	}
 
+	macro.Attachments = populateMacroAttachments(app, macro.ID)
+
 	return r.SendEnvelope(macro)
 }
 
 // handleCreateMacro creates new macro.
 func handleCreateMacro(r *fastglue.Request) error {
 	var (
-		app   = r.Context.(*App)
-		macro = models.Macro{}
+		app = r.Context.(*App)
+		req = macroRequest{}
 	)
 
-	if err := r.Decode(&macro, "json"); err != nil {
+	if err := r.Decode(&req, "json"); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("errors.parsingRequest"), err.Error(), envelope.InputError)
 	}
 
-	if err := validateMacro(app, macro); err != nil {
+	if err := validateMacro(app, req.Macro); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 
-	createdMacro, err := app.macro.Create(macro.Name, macro.MessageContent, macro.UserID, macro.TeamID, macro.Visibility, macro.VisibleWhen, macro.Actions)
+	createdMacro, err := app.macro.Create(req.Name, req.MessageContent, req.UserID, req.TeamID, req.Visibility, req.VisibleWhen, req.Actions)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 
+	// Link any media files the agent uploaded against this macro. Attach
+	// failures are logged but non-fatal — the macro itself was created
+	// successfully and the orphaned media will be reaped by the unlinked-
+	// media sweeper.
+	for _, mediaID := range req.AttachmentIDs {
+		if err := app.media.Attach(mediaID, mmodels.ModelMacros, createdMacro.ID); err != nil {
+			app.lo.Warn("error attaching media to macro", "media_id", mediaID, "macro_id", createdMacro.ID, "error", err)
+		}
+	}
+
+	createdMacro.Attachments = populateMacroAttachments(app, createdMacro.ID)
 	return r.SendEnvelope(createdMacro)
 }
 
 // handleUpdateMacro updates a macro.
 func handleUpdateMacro(r *fastglue.Request) error {
 	var (
-		app   = r.Context.(*App)
-		macro = models.Macro{}
+		app = r.Context.(*App)
+		req = macroRequest{}
 	)
 
 	id, err := strconv.Atoi(r.RequestCtx.UserValue("id").(string))
@@ -106,19 +133,35 @@ func handleUpdateMacro(r *fastglue.Request) error {
 			"Invalid macro `id`.", nil, envelope.InputError)
 	}
 
-	if err := r.Decode(&macro, "json"); err != nil {
+	if err := r.Decode(&req, "json"); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "decode failed", err.Error(), envelope.InputError)
 	}
 
-	if err := validateMacro(app, macro); err != nil {
+	if err := validateMacro(app, req.Macro); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 
-	updatedMacro, err := app.macro.Update(id, macro.Name, macro.MessageContent, macro.UserID, macro.TeamID, macro.Visibility, macro.VisibleWhen, macro.Actions)
+	updatedMacro, err := app.macro.Update(id, req.Name, req.MessageContent, req.UserID, req.TeamID, req.Visibility, req.VisibleWhen, req.Actions)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 
+	// Re-sync attachments: detach the existing set, then attach whatever the
+	// client sent. The frontend posts the full intended attachment list (kept
+	// + newly-uploaded), so any media that was on the macro but is missing
+	// from req.AttachmentIDs has been removed by the agent. We don't delete
+	// the storage blobs here — orphaned media gets swept up by the unlinked-
+	// message cleaner since it's now model_id=NULL with model_type also NULL.
+	if err := app.media.DetachModelMedia(mmodels.ModelMacros, id); err != nil {
+		app.lo.Warn("error detaching macro media", "macro_id", id, "error", err)
+	}
+	for _, mediaID := range req.AttachmentIDs {
+		if err := app.media.Attach(mediaID, mmodels.ModelMacros, id); err != nil {
+			app.lo.Warn("error attaching media to macro", "media_id", mediaID, "macro_id", id, "error", err)
+		}
+	}
+
+	updatedMacro.Attachments = populateMacroAttachments(app, id)
 	return r.SendEnvelope(updatedMacro)
 }
 
@@ -129,10 +172,45 @@ func handleDeleteMacro(r *fastglue.Request) error {
 	if err != nil || id == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.somethingWentWrong"), nil, envelope.InputError)
 	}
+
+	// Delete the macro's attachments before the macro itself. Best-effort:
+	// orphaned media here is non-fatal but worth logging.
+	if err := app.media.DeleteModelMedia(mmodels.ModelMacros, id); err != nil {
+		app.lo.Warn("error deleting macro media", "macro_id", id, "error", err)
+	}
+
 	if err := app.macro.Delete(id); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 	return r.SendEnvelope(true)
+}
+
+// handleCloneMacroAttachments duplicates a macro's attachments so they can be
+// included in a reply or new conversation. Each clone gets its own UUID and
+// DB row (model_type='messages', model_id=NULL, ready to be attached when the
+// message is sent), so deleting either the macro or the attachment afterwards
+// won't invalidate the already-sent copy.
+func handleCloneMacroAttachments(r *fastglue.Request) error {
+	var app = r.Context.(*App)
+	id, err := strconv.Atoi(r.RequestCtx.UserValue("id").(string))
+	if err != nil || id == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.somethingWentWrong"), nil, envelope.InputError)
+	}
+
+	// Verify the macro exists and is readable. This also gives us the standard
+	// not-found envelope rather than silently returning an empty list when the
+	// id is bogus.
+	if _, err := app.macro.Get(id); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+
+	newMedia, err := app.media.DuplicateForModel(mmodels.ModelMacros, id)
+	if err != nil {
+		app.lo.Error("error duplicating macro attachments", "macro_id", id, "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, app.i18n.T("globals.messages.somethingWentWrong"), nil, envelope.GeneralError)
+	}
+
+	return r.SendEnvelope(newMedia)
 }
 
 // handleApplyMacro applies macro actions to a conversation.
@@ -215,6 +293,22 @@ func handleApplyMacro(r *fastglue.Request) error {
 	return r.SendJSON(fasthttp.StatusOK, map[string]interface{}{
 		"message": app.i18n.T("macro.applied"),
 	})
+}
+
+// populateMacroAttachments returns the media files attached to a macro with
+// signed/served URLs filled in. GetByModel itself doesn't populate URL (only
+// the single-row Get does), so we set it here. Errors are logged and swallowed
+// — a missing attachment list shouldn't block the macro response.
+func populateMacroAttachments(app *App, macroID int) []mmodels.Media {
+	attachments, err := app.media.GetByModel(macroID, mmodels.ModelMacros)
+	if err != nil {
+		app.lo.Warn("error fetching macro attachments", "macro_id", macroID, "error", err)
+		return []mmodels.Media{}
+	}
+	for i := range attachments {
+		attachments[i].URL = app.media.GetURL(attachments[i].UUID, attachments[i].ContentType, attachments[i].Filename)
+	}
+	return attachments
 }
 
 // hasActionPermission checks user permission for given action

@@ -429,7 +429,7 @@ const handleEmojiSelect = (emoji) => {
   nextTick(() => (insertContent.value = emoji))
 }
 
-const { uploadingFiles, handleFileUpload, handleFileDelete, mediaFiles, clearMediaFiles } =
+const { uploadingFiles, handleFileUpload, handleFileDelete, mediaFiles, clearMediaFiles, setMediaFiles } =
   useFileUpload({
     linkedModel: 'messages'
   })
@@ -656,24 +656,39 @@ const createConversation = form.handleSubmit(async (values) => {
  */
 watch(
   () => conversationStore.getMacro(MACRO_CONTEXT.NEW_CONVERSATION).id,
-  (newId) => {
+  async (newId) => {
     if (!newId) return
-    const macroContent = conversationStore.getMacro(
-      MACRO_CONTEXT.NEW_CONVERSATION
-    ).message_content
-    if (!macroContent) return
-    const fullName = [form.values.first_name, form.values.last_name]
-      .filter(Boolean)
-      .join(' ')
-    const replaced = macroContent
-      .replaceAll('{{contact.first_name}}', form.values.first_name || '')
-      .replaceAll('{{contact.last_name}}', form.values.last_name || '')
-      .replaceAll('{{contact.full_name}}', fullName)
-      .replaceAll('{{contact.email}}', form.values.contact_email || '')
-    insertContent.value = undefined
-    nextTick(() => {
-      insertContent.value = replaced
-    })
+    const macro = conversationStore.getMacro(MACRO_CONTEXT.NEW_CONVERSATION)
+    const macroContent = macro.message_content
+    if (macroContent) {
+      const fullName = [form.values.first_name, form.values.last_name]
+        .filter(Boolean)
+        .join(' ')
+      const replaced = macroContent
+        .replaceAll('{{contact.first_name}}', form.values.first_name || '')
+        .replaceAll('{{contact.last_name}}', form.values.last_name || '')
+        .replaceAll('{{contact.full_name}}', fullName)
+        .replaceAll('{{contact.email}}', form.values.contact_email || '')
+      insertContent.value = undefined
+      nextTick(() => {
+        insertContent.value = replaced
+      })
+    }
+
+    // MP5: Clone macro attachments into the new-conversation draft. Same
+    // contract as ReplyBox — backend hands back fresh media rows, we append
+    // them so the user can still remove or add more before submit.
+    if (macro.attachments && macro.attachments.length > 0) {
+      try {
+        const resp = await api.cloneMacroAttachments(macro.id)
+        const clonedFiles = resp.data.data
+        if (clonedFiles && clonedFiles.length > 0) {
+          setMediaFiles([...mediaFiles.value, ...clonedFiles])
+        }
+      } catch (err) {
+        console.error('Error cloning macro attachments:', err)
+      }
+    }
   },
   { deep: true }
 )

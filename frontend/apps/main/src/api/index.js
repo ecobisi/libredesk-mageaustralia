@@ -364,6 +364,7 @@ const updateMacro = (id, data) =>
     }
   })
 const deleteMacro = (id) => http.delete(`/api/v1/macros/${id}`)
+const cloneMacroAttachments = (id) => http.post(`/api/v1/macros/${id}/clone-attachments`)
 const applyMacro = (uuid, id, data) =>
   http.post(`/api/v1/conversations/${uuid}/macros/${id}/apply`, data, {
     headers: {
@@ -617,6 +618,7 @@ export default {
   createMacro,
   updateMacro,
   deleteMacro,
+  cloneMacroAttachments,
   applyMacro,
   updateCurrentUser,
   updateAssignee,

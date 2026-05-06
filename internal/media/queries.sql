@@ -52,3 +52,12 @@ WHERE model_type = 'messages'
 
 -- name: content-id-exists
 SELECT uuid FROM media WHERE content_id = $1;
+
+-- name: detach-model-media
+UPDATE media SET model_id = NULL, model_type = NULL
+WHERE model_type = $1 AND model_id = $2;
+
+-- name: delete-model-media
+DELETE FROM media
+WHERE model_type = $1 AND model_id = $2
+RETURNING "uuid";

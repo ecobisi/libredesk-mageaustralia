@@ -27,6 +27,35 @@
       </FormItem>
     </FormField>
 
+    <!-- Attachments. Files uploaded here are linked to the macro via the
+         polymorphic media table; when an agent applies this macro the backend
+         clones (not references) each file into the reply. -->
+    <div>
+      <label class="text-sm font-medium leading-none">{{ t('globals.terms.file', 2) }}</label>
+      <div class="mt-2">
+        <AttachmentsPreview
+          v-if="mediaFiles.length > 0 || uploadingFiles.length > 0"
+          :attachments="mediaFiles"
+          :uploadingFiles="uploadingFiles"
+          :onDelete="handleFileDelete"
+        />
+        <div class="mt-2">
+          <label
+            class="inline-flex items-center gap-2 px-3 py-1.5 text-sm border rounded cursor-pointer hover:bg-accent"
+          >
+            <PaperclipIcon :size="16" />
+            <span>{{ t('globals.messages.attachFile') }}</span>
+            <input
+              type="file"
+              class="hidden"
+              multiple
+              @change="handleFileUpload"
+            />
+          </label>
+        </div>
+      </div>
+    </div>
+
     <FormField
       v-slot="{ componentField }"
       name="actions"
@@ -146,6 +175,8 @@ import { Input } from '@shared-ui/components/ui/input/index.js'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@shared-ui/components/ui/form/index.js'
 import ActionBuilder from '@/features/admin/macros/ActionBuilder.vue'
 import { useConversationFilters } from '../../../composables/useConversationFilters.js'
+import { useFileUpload } from '@main/composables/useFileUpload'
+import AttachmentsPreview from '@/features/conversation/message/attachment/AttachmentsPreview.vue'
 import { useUsersStore } from '../../../stores/users.js'
 import { useTeamStore } from '../../../stores/team.js'
 import { getTextFromHTML } from '@shared-ui/utils/string'
@@ -161,6 +192,7 @@ import {
   SelectTag
 } from '@shared-ui/components/ui/select/index.js'
 import { useI18n } from 'vue-i18n'
+import { Paperclip as PaperclipIcon } from 'lucide-vue-next'
 import Editor from '@main/components/editor/TextEditor.vue'
 
 const { macroActions } = useConversationFilters()
@@ -185,6 +217,19 @@ const props = defineProps({
     type: Boolean,
     default: false
   }
+})
+
+// File upload composable for macro attachments. Uploaded files get
+// linked_model='macros' so the backend can re-attach them via media.Attach()
+// once the macro is created/saved.
+const {
+  uploadingFiles,
+  handleFileUpload,
+  handleFileDelete,
+  mediaFiles,
+  setMediaFiles
+} = useFileUpload({
+  linkedModel: 'macros'
 })
 
 const submitLabel = computed(() => {
@@ -218,6 +263,9 @@ const onSubmit = form.handleSubmit(async (values) => {
   if (textContent.length === 0) {
     values.message_content = ''
   }
+  // Inject the current attachment ID list so the backend handler can re-sync
+  // the macro's media (detach all, then attach exactly this set).
+  values.attachment_ids = mediaFiles.value.map((f) => f.id)
   props.submitForm(values)
 })
 
@@ -226,6 +274,12 @@ watch(
   (newValues) => {
     if (Object.keys(newValues).length === 0) return
     form.setValues(newValues)
+    // When editing an existing macro, seed the file picker with whatever the
+    // backend returned so the agent sees the current attachments and can
+    // remove/keep them.
+    if (newValues.attachments && newValues.attachments.length > 0) {
+      setMediaFiles([...newValues.attachments])
+    }
   },
   { immediate: true }
 )

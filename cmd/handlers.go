@@ -142,6 +142,7 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.PUT("/api/v1/macros/{id}", perm(handleUpdateMacro, "macros:manage"))
 	g.DELETE("/api/v1/macros/{id}", perm(handleDeleteMacro, "macros:manage"))
 	g.POST("/api/v1/conversations/{uuid}/macros/{id}/apply", auth(handleApplyMacro))
+	g.POST("/api/v1/macros/{id}/clone-attachments", auth(handleCloneMacroAttachments))
 
 	// Agents.
 	g.GET("/api/v1/agents/me", auth(handleGetCurrentAgent))

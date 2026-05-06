@@ -11,6 +11,7 @@ const (
 	// TODO: pick these table names from their respective package/models/models.go
 	ModelMessages = "messages"
 	ModelUser     = "users"
+	ModelMacros   = "macros"
 
 	DispositionInline = "inline"
 )

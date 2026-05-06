@@ -692,14 +692,36 @@ const handleDeleteDraft = () => {
  * the loaded conversation's contact). This matches v1.0.3 behaviour and
  * means an agent can pad a macro between typed sentences instead of choosing
  * "macro xor draft".
+ *
+ * MP5: If the macro has attachments, ask the backend to clone them (each
+ * gets a fresh UUID + DB row, model_type='messages' / model_id=NULL) and
+ * append them to the reply's attachment list. Cloning rather than referencing
+ * means the agent can later delete the macro (or its files) without breaking
+ * the already-sent message.
  */
 watch(
   () => conversationStore.getMacro('reply').id,
-  (newId) => {
+  async (newId) => {
     if (!newId) return
-    const macroContent = conversationStore.getMacro('reply').message_content
-    if (!macroContent) return
-    replyBoxContentRef.value?.insertMacro(macroContent)
+    const macro = conversationStore.getMacro('reply')
+    const macroContent = macro.message_content
+    if (macroContent) {
+      replyBoxContentRef.value?.insertMacro(macroContent)
+    }
+
+    if (macro.attachments && macro.attachments.length > 0) {
+      try {
+        const resp = await api.cloneMacroAttachments(macro.id)
+        const clonedFiles = resp.data.data
+        if (clonedFiles && clonedFiles.length > 0) {
+          // mediaFiles is exposed as readonly from useFileUpload, so we
+          // re-set the full list rather than push() to it.
+          setMediaFiles([...mediaFiles.value, ...clonedFiles])
+        }
+      } catch (err) {
+        console.error('Error cloning macro attachments:', err)
+      }
+    }
   },
   { deep: true }
 )
