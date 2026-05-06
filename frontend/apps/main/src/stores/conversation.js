@@ -992,7 +992,44 @@ export const useConversationStore = defineStore('conversation', () => {
     }
     const existing = conversations?.data?.find(c => c.uuid === update.uuid)
     if (existing) {
+      const oldStatus = existing.status
+      const oldAssignedUserId = existing.assigned_user_id
       deepMerge(existing, update)
+
+      // Prune the row from the list when the change makes it no longer match the
+      // current filter. Mirrors v1.0.3 behaviour from f072968b: agent status/
+      // assignment changes should immediately remove the conversation from
+      // server-filtered views (saved views, spam, trash, assigned, unassigned)
+      // so the list reflects the new state without a refetch.
+      if ('status' in update && update.status !== oldStatus) {
+        // Saved views: status filtering is server-side, so remove on any change.
+        if (conversations.viewID > 0) {
+          conversations.data = conversations.data.filter(c => c.uuid !== update.uuid)
+          conversations.total = Math.max(0, conversations.total - 1)
+        }
+        // SPAM / TRASH lists: server-side filtered by exact status.
+        if (conversations.listType === CONVERSATION_LIST_TYPE.SPAM && update.status !== 'Spam') {
+          conversations.data = conversations.data.filter(c => c.uuid !== update.uuid)
+          conversations.total = Math.max(0, conversations.total - 1)
+        }
+        if (conversations.listType === CONVERSATION_LIST_TYPE.TRASH && update.status !== 'Trashed') {
+          conversations.data = conversations.data.filter(c => c.uuid !== update.uuid)
+          conversations.total = Math.max(0, conversations.total - 1)
+        }
+        // Normal inbox lists: the conversationsList computed handles the status
+        // filter client-side, no pruning needed here.
+      }
+
+      if ('assigned_user_id' in update && update.assigned_user_id !== oldAssignedUserId) {
+        if (conversations.listType === CONVERSATION_LIST_TYPE.ASSIGNED && !update.assigned_user_id) {
+          conversations.data = conversations.data.filter(c => c.uuid !== update.uuid)
+          conversations.total = Math.max(0, conversations.total - 1)
+        }
+        if (conversations.listType === CONVERSATION_LIST_TYPE.UNASSIGNED && update.assigned_user_id) {
+          conversations.data = conversations.data.filter(c => c.uuid !== update.uuid)
+          conversations.total = Math.max(0, conversations.total - 1)
+        }
+      }
     }
   }
 
