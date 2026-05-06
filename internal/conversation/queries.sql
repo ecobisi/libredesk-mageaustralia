@@ -741,7 +741,7 @@ SELECT
     m.created_at,
     m.updated_at,
     m.status,
-    m.type, 
+    m.type,
     m.content,
     m.uuid,
     m.private,
@@ -755,6 +755,24 @@ AND m.status = ANY($3)
 AND m.private = NOT $4
 ORDER BY m.created_at DESC
 LIMIT 1;
+
+-- name: get-previous-email-messages
+-- Last N non-private incoming/outgoing messages in a conversation strictly
+-- older than the given message ID. Used by sendOutgoingMessage to build a
+-- Gmail-style quoted thread on outbound replies. Activity rows and private
+-- notes are excluded so neither leaks to the recipient.
+SELECT cm.content, cm.created_at, cm.sender_type, cm.type,
+       COALESCE(u.first_name, '') AS sender_first_name,
+       COALESCE(u.last_name, '') AS sender_last_name,
+       COALESCE(u.email, '')      AS sender_email
+FROM conversation_messages cm
+LEFT JOIN users u ON cm.sender_id = u.id
+WHERE cm.conversation_id = $1
+  AND cm.type IN ('incoming', 'outgoing')
+  AND cm.private = false
+  AND cm.id < $2
+ORDER BY cm.created_at DESC
+LIMIT $3;
 
 -- name: update-message-source-id
 UPDATE conversation_messages SET source_id = $1 WHERE id = $2;

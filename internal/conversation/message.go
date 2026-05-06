@@ -150,6 +150,63 @@ func (m *Manager) sendOutgoingMessage(message models.Message) {
 		return
 	}
 
+	// Detect forward via meta. Forwards re-route from a conversation to an
+	// external recipient, and the recipient should see them as a fresh
+	// thread, not as a reply to the originating customer's message.
+	// Unmarshal failure is non-fatal — we just treat the message as a
+	// regular reply.
+	// EC14 piggybacks on the same meta unmarshal to read an optional
+	// per-message From override (the alias the agent picked in the reply
+	// box). Validation against the inbox's primary From + config.aliases
+	// happens at the API boundary; here we just apply the trusted value.
+	// Hoisted above RenderMessageInTemplate so UX7 can append the quoted
+	// thread to message.Content before templating, ensuring the agent's
+	// signature/template wraps the full body (thread included).
+	isForward := false
+	var fromOverride string
+	if len(message.Meta) > 0 {
+		var meta map[string]any
+		if err := json.Unmarshal(message.Meta, &meta); err != nil {
+			m.lo.Debug("send: meta unmarshal failed, treating as non-forward", "error", err, "message_id", message.ID)
+		} else {
+			if _, ok := meta["forwarded_to"]; ok {
+				isForward = true
+			}
+			// Trusted: validated by validateInboxFromOverride at the API boundary.
+			if v, ok := meta["from"].(string); ok {
+				fromOverride = v
+			}
+		}
+	}
+
+	// UX7: Append a Gmail-style quoted thread of the last 3 prior non-private
+	// email messages so the recipient sees the conversation context inline,
+	// matching the experience of replying from Gmail / Outlook / Freshdesk.
+	// Email channel only (chat etc. don't quote), and only on regular replies
+	// (forwards already get a "Forwarded message" header from a different
+	// path and would double up). Failure to fetch is non-fatal — send the
+	// reply without the thread rather than block on a transient DB error.
+	if inb.Channel() == inbox.ChannelEmail && !isForward {
+		if prevMessages, perr := m.getPreviousEmailMessages(message.ConversationID, message.ID, 3); perr == nil && len(prevMessages) > 0 {
+			var quotedHTML strings.Builder
+			quotedHTML.WriteString(`<div class="gmail_quote">`)
+			for _, pm := range prevMessages {
+				senderName := strings.TrimSpace(pm.SenderFirstName + " " + pm.SenderLastName)
+				if senderName == "" {
+					senderName = pm.SenderEmail
+				}
+				dateStr := pm.CreatedAt.Format("Mon, Jan 2, 2006 at 3:04 PM")
+				quotedHTML.WriteString(fmt.Sprintf(
+					`<br><br><div class="gmail_attr" style="color:#666;font-size:12px;">On %s, %s &lt;%s&gt; wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex;">%s</blockquote>`,
+					dateStr, senderName, pm.SenderEmail, pm.Content))
+			}
+			quotedHTML.WriteString(`</div>`)
+			message.Content += quotedHTML.String()
+		} else if perr != nil {
+			m.lo.Warn("UX7: failed to fetch previous messages for quoted thread", "error", perr, "conversation_id", message.ConversationID, "message_id", message.ID)
+		}
+	}
+
 	// Render content in template
 	if err := m.RenderMessageInTemplate(inb.Channel(), &message); err != nil {
 		handleError(err, "error rendering content in template")
@@ -174,32 +231,6 @@ func (m *Manager) sendOutgoingMessage(message models.Message) {
 
 	// Convert to OutboundMessage for transport
 	outbound := message.ToOutbound()
-
-	// Detect forward via meta. Forwards re-route from a conversation to an
-	// external recipient, and the recipient should see them as a fresh
-	// thread, not as a reply to the originating customer's message.
-	// Unmarshal failure is non-fatal — we just treat the message as a
-	// regular reply.
-	// EC14 piggybacks on the same meta unmarshal to read an optional
-	// per-message From override (the alias the agent picked in the reply
-	// box). Validation against the inbox's primary From + config.aliases
-	// happens at the API boundary; here we just apply the trusted value.
-	isForward := false
-	var fromOverride string
-	if len(message.Meta) > 0 {
-		var meta map[string]any
-		if err := json.Unmarshal(message.Meta, &meta); err != nil {
-			m.lo.Debug("send: meta unmarshal failed, treating as non-forward", "error", err, "message_id", message.ID)
-		} else {
-			if _, ok := meta["forwarded_to"]; ok {
-				isForward = true
-			}
-			// Trusted: validated by validateInboxFromOverride at the API boundary.
-			if v, ok := meta["from"].(string); ok {
-				fromOverride = v
-			}
-		}
-	}
 
 	if inb.Channel() == inbox.ChannelEmail {
 		// Set from address of the inbox.
@@ -1653,6 +1684,19 @@ func (m *Manager) getLatestMessage(conversationID int, typ []string, status []st
 		return message, fmt.Errorf("fetching latest message: %w", err)
 	}
 	return message, nil
+}
+
+// getPreviousEmailMessages returns the last `limit` non-private incoming or
+// outgoing messages for a conversation strictly older than the given message
+// ID. Used by sendOutgoingMessage to build a Gmail-style quoted thread on
+// outbound replies. Returns sql.ErrNoRows-style empty slice when the message
+// is the first in the conversation.
+func (m *Manager) getPreviousEmailMessages(conversationID, beforeMessageID, limit int) ([]models.QuotedMessage, error) {
+	var messages []models.QuotedMessage
+	if err := m.q.GetPreviousEmailMessages.Select(&messages, conversationID, beforeMessageID, limit); err != nil {
+		return nil, fmt.Errorf("fetching previous email messages: %w", err)
+	}
+	return messages, nil
 }
 
 // ProcessIncomingMessageHooks handles automation rules, webhooks, SLA events, and other post-processing

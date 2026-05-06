@@ -264,6 +264,19 @@ type ConversationParticipant struct {
 	AvatarURL null.String `db:"avatar_url" json:"avatar_url"`
 }
 
+// QuotedMessage holds the data needed to build a Gmail-style quoted reply
+// block when threading prior messages into an outgoing email. Used only by
+// sendOutgoingMessage on the email channel; never persisted.
+type QuotedMessage struct {
+	Content         string    `db:"content"`
+	CreatedAt       time.Time `db:"created_at"`
+	SenderType      string    `db:"sender_type"`
+	Type            string    `db:"type"`
+	SenderFirstName string    `db:"sender_first_name"`
+	SenderLastName  string    `db:"sender_last_name"`
+	SenderEmail     string    `db:"sender_email"`
+}
+
 type MessageAuthor struct {
 	ID                 int         `db:"id" json:"id"`
 	FirstName          string      `db:"first_name" json:"first_name"`
