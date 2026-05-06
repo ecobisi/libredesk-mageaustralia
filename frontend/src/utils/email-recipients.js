@@ -38,34 +38,20 @@ export function computeRecipientsFromMessage (message, contactEmail, inboxEmail,
             .map(e => e.toLowerCase())
     )
 
-    // Build TO field — the conversation contact is always the primary recipient.
+    // Build TO field. Use the latest message's actual addresses verbatim — that's
+    // the email we're replying to, regardless of who the conversation's "contact"
+    // currently points at. The previous "contact was changed" override that swapped
+    // in `contactEmail` whenever it wasn't found in from/to was too broad: it
+    // caught every legitimate 3rd-party CC/forward as a "contact change" and sent
+    // replies to the wrong address. If the contact has actually been reassigned,
+    // the caller should pass the updated value through `contactEmail` only when
+    // it knows the change happened (e.g. via an `wasContactChanged` flag at the
+    // call site) — not infer it from list membership.
     let toList
     if (isIncoming) {
-        if (meta.from && meta.from.length) {
-            // Check if the contact email matches any of the from addresses.
-            const fromLower = meta.from.map(e => e.toLowerCase())
-            if (contactLower && !fromLower.includes(contactLower)) {
-                // Contact was changed — use the new contact as To.
-                toList = [contactEmail]
-            } else {
-                toList = meta.from
-            }
-        } else {
-            toList = contactEmail ? [contactEmail] : []
-        }
+        toList = (meta.from && meta.from.length) ? meta.from : (contactEmail ? [contactEmail] : [])
     } else {
-        if (meta.to && meta.to.length) {
-            // For outgoing, check if contact email is in the To list.
-            const toLower = meta.to.map(e => e.toLowerCase())
-            if (contactLower && !toLower.includes(contactLower)) {
-                // Contact was changed — use the new contact as To.
-                toList = [contactEmail]
-            } else {
-                toList = meta.to
-            }
-        } else {
-            toList = contactEmail ? [contactEmail] : []
-        }
+        toList = (meta.to && meta.to.length) ? meta.to : (contactEmail ? [contactEmail] : [])
     }
 
     // Build CC field
