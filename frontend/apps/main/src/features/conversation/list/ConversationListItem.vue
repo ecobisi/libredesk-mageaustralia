@@ -38,7 +38,7 @@
           <div class="flex-1 min-w-0 space-y-2">
             <!-- Name + Subject group -->
             <div>
-              <!-- Contact name + inbox + time -->
+              <!-- Contact name + inbox + status/priority badges -->
               <div class="flex items-baseline justify-between gap-2">
                 <div class="flex items-baseline gap-1.5 min-w-0">
                   <h3 class="text-sm font-semibold truncate text-foreground">
@@ -48,14 +48,32 @@
                     {{ conversation.inbox_name }}
                   </span>
                 </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span
+                    v-if="conversation.status"
+                    class="text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
+                    :style="getStatusStyle(conversation.status)"
+                  >{{ conversation.status }}</span>
+                  <span
+                    v-if="conversation.priority"
+                    class="w-2 h-2 rounded-full"
+                    :class="priorityDotClass(conversation.priority)"
+                    :title="conversation.priority"
+                  />
+                </div>
               </div>
 
-              <!-- Subject -->
+              <!-- Reference number + Subject -->
               <p
-                v-if="conversation.subject"
+                v-if="conversation.subject || conversation.reference_number"
                 class="text-xs text-muted-foreground truncate"
               >
-                {{ conversation.subject }}
+                <span
+                  v-if="conversation.reference_number"
+                  class="font-medium"
+                >#{{ conversation.reference_number }}</span>
+                <span v-if="conversation.reference_number && conversation.subject"> </span>
+                <span v-if="conversation.subject">{{ conversation.subject }}</span>
               </p>
             </div>
 
@@ -275,6 +293,7 @@ import { useTeamStore } from '@/stores/team'
 import { useUserStore } from '@/stores/user'
 import { useToast } from '@/composables/useToast'
 import { permissions as p } from '@/constants/permissions'
+import { statusColorStyle } from '@/constants/statusColors'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
 
@@ -350,6 +369,23 @@ const handleCheckboxClick = (event) => {
 
 const canAssignAgent = computed(() => userStore.can(p.CONVERSATIONS_UPDATE_USER_ASSIGNEE))
 const canAssignTeam = computed(() => userStore.can(p.CONVERSATIONS_UPDATE_TEAM_ASSIGNEE))
+
+// Resolve status name to admin-configured colour (FS17). Falls back to gray
+// when the status name doesn't match a loaded status row.
+const getStatusStyle = (statusName) => {
+  const match = (conversationStore.statuses || []).find(s => s.name === statusName)
+  return statusColorStyle(match?.color)
+}
+
+const priorityDotClass = (priority) => {
+  switch ((priority || '').toLowerCase()) {
+    case 'urgent': return 'bg-red-500'
+    case 'high': return 'bg-orange-500'
+    case 'medium': return 'bg-yellow-500'
+    case 'low': return 'bg-blue-500'
+    default: return 'bg-muted'
+  }
+}
 
 const assignAgent = async (agent) => {
   try {
