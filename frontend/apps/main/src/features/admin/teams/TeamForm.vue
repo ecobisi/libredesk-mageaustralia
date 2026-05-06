@@ -10,6 +10,47 @@
             <EmojiPicker :native="true" @select="onSelectEmoji" class="w-[300px]" />
           </div>
         </FormControl>
+        <FormDescription>{{ $t('admin.team.emoji.description') }}</FormDescription>
+        <FormMessage />
+      </FormItem>
+    </FormField>
+
+    <FormField name="color" v-slot="{ value }">
+      <FormItem>
+        <FormLabel>{{ $t('admin.team.color') }}</FormLabel>
+        <FormControl>
+          <div class="flex items-center gap-3">
+            <Input
+              type="color"
+              :model-value="value || '#6b7280'"
+              @update:model-value="(v) => form.setFieldValue('color', v)"
+              class="h-9 w-16 cursor-pointer p-1"
+            />
+            <Input
+              type="text"
+              placeholder="#7c3aed"
+              :model-value="value || ''"
+              @update:model-value="(v) => form.setFieldValue('color', v)"
+              class="font-mono w-32"
+            />
+            <button
+              v-if="value"
+              type="button"
+              @click="form.setFieldValue('color', '')"
+              class="text-xs text-muted-foreground hover:underline"
+            >
+              {{ $t('admin.team.color.clear') }}
+            </button>
+            <div
+              v-if="value"
+              class="flex h-9 w-9 items-center justify-center rounded-md text-white font-semibold text-sm"
+              :style="{ backgroundColor: value }"
+            >
+              {{ (form.values.name || '?').charAt(0).toUpperCase() }}
+            </div>
+          </div>
+        </FormControl>
+        <FormDescription>{{ $t('admin.team.color.description') }}</FormDescription>
         <FormMessage />
       </FormItem>
     </FormField>

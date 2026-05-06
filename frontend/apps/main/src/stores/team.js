@@ -12,6 +12,7 @@ export const useTeamStore = defineStore('team', () => {
         label: team.name,
         value: String(team.id),
         emoji: team.emoji,
+        color: team.color,
     })))
     const fetchTeams = async () => {
         if (teams.value.length) return

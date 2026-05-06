@@ -60,7 +60,7 @@ func handleCreateTeam(r *fastglue.Request) error {
 		return sendErrorEnvelope(r, envelope.NewError(envelope.InputError, app.i18n.T("errors.parsingRequest"), nil))
 	}
 
-	createdTeam, err := app.team.Create(req.Name, req.Timezone, req.ConversationAssignmentType, req.BusinessHoursID, req.SLAPolicyID, req.Emoji.String, req.MaxAutoAssignedConversations)
+	createdTeam, err := app.team.Create(req.Name, req.Timezone, req.ConversationAssignmentType, req.BusinessHoursID, req.SLAPolicyID, req.Emoji.String, req.Color.String, req.MaxAutoAssignedConversations)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
@@ -83,7 +83,7 @@ func handleUpdateTeam(r *fastglue.Request) error {
 		return sendErrorEnvelope(r, envelope.NewError(envelope.InputError, app.i18n.T("errors.parsingRequest"), nil))
 	}
 
-	updatedTeam, err := app.team.Update(id, req.Name, req.Timezone, req.ConversationAssignmentType, req.BusinessHoursID, req.SLAPolicyID, req.Emoji.String, req.MaxAutoAssignedConversations)
+	updatedTeam, err := app.team.Update(id, req.Name, req.Timezone, req.ConversationAssignmentType, req.BusinessHoursID, req.SLAPolicyID, req.Emoji.String, req.Color.String, req.MaxAutoAssignedConversations)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}

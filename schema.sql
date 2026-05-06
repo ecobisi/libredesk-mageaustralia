@@ -100,6 +100,7 @@ CREATE TABLE teams (
 	updated_at TIMESTAMPTZ DEFAULT NOW(),
 	"name" TEXT NOT NULL,
 	emoji TEXT NULL,
+	color TEXT NULL,
 	conversation_assignment_type conversation_assignment_type NOT NULL,
 	max_auto_assigned_conversations INT DEFAULT 0 NOT NULL,
 
@@ -109,6 +110,7 @@ CREATE TABLE teams (
 
 	timezone TEXT NULL,
 	CONSTRAINT constraint_teams_on_emoji CHECK (length(emoji) <= 50),
+	CONSTRAINT constraint_teams_on_color CHECK (color IS NULL OR color ~ '^#[0-9a-fA-F]{6}$'),
 	CONSTRAINT constraint_teams_on_name CHECK (length("name") <= 140),
 	CONSTRAINT constraint_teams_on_timezone CHECK (length(timezone) <= 140),
 	CONSTRAINT constraint_teams_on_name_unique UNIQUE ("name")

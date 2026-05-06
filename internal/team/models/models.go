@@ -14,6 +14,7 @@ type Team struct {
 	CreatedAt                    time.Time   `db:"created_at" json:"created_at"`
 	UpdatedAt                    time.Time   `db:"updated_at" json:"updated_at"`
 	Emoji                        null.String `db:"emoji" json:"emoji"`
+	Color                        null.String `db:"color" json:"color"`
 	Name                         string      `db:"name" json:"name"`
 	ConversationAssignmentType   string      `db:"conversation_assignment_type" json:"conversation_assignment_type"`
 	Timezone                     string      `db:"timezone" json:"timezone"`
@@ -26,6 +27,7 @@ type TeamCompact struct {
 	ID    int         `db:"id" json:"id"`
 	Name  string      `db:"name" json:"name"`
 	Emoji null.String `db:"emoji" json:"emoji"`
+	Color null.String `db:"color" json:"color"`
 }
 
 type TeamMember struct {

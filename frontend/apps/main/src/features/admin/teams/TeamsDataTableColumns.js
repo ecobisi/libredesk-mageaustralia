@@ -14,13 +14,31 @@ export const columns = [
     },
     cell: function ({ row }) {
       const emoji = row.original.emoji
+      const color = row.original.color
+      const name = row.getValue('name')
+      const children = []
+      if (emoji) {
+        children.push(`${emoji} `)
+      } else if (color) {
+        children.push(
+          h(
+            'span',
+            {
+              class: 'inline-flex h-5 w-5 items-center justify-center rounded text-white font-semibold text-[11px] mr-1 align-middle',
+              style: { backgroundColor: color }
+            },
+            (name || '?').charAt(0).toUpperCase()
+          )
+        )
+      }
+      children.push(name)
       return h('div', { class: 'text-center' },
         h(RouterLink,
           {
             to: { name: 'edit-team', params: { id: row.original.id } },
             class: 'text-primary hover:underline'
           },
-          () => [emoji ? `${emoji} ` : '', row.getValue('name')]
+          () => children
         )
       )
     }

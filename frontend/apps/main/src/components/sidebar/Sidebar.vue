@@ -540,7 +540,15 @@ const viewToDelete = ref(null)
                           :is-active="route.params.teamID == team.id"
                           @click="navigateToTeamInbox(team.id)"
                         >
-                          {{ team.emoji }}<span>{{ team.name }}</span>
+                          <template v-if="team.emoji">{{ team.emoji }}</template>
+                          <span
+                            v-else-if="team.color"
+                            class="flex h-5 w-5 items-center justify-center rounded text-white font-semibold text-[11px] shrink-0"
+                            :style="{ backgroundColor: team.color }"
+                          >
+                            {{ (team.name || '?').charAt(0).toUpperCase() }}
+                          </span>
+                          <span>{{ team.name }}</span>
                         </SidebarMenuButton>
                       </SidebarMenuSubItem>
                     </SidebarMenuSub>

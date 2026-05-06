@@ -8,7 +8,13 @@ export const createTeamFormSchema = (t) => z.object({
     .min(2, {
       message: t('globals.messages.required')
     }),
-  emoji: z.string({ required_error: t('globals.messages.required') }),
+  emoji: z.string().optional().nullable().or(z.literal('')),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, t('admin.team.color.invalidHex'))
+    .optional()
+    .nullable()
+    .or(z.literal('')),
   conversation_assignment_type: z.string({ required_error: t('globals.messages.required') }),
   max_auto_assigned_conversations: z.coerce.number().optional().default(0),
   timezone: z.string({ required_error: t('globals.messages.required') }),
