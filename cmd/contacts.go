@@ -1,12 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	amodels "github.com/abhinavxd/libredesk/internal/auth/models"
 	"github.com/abhinavxd/libredesk/internal/envelope"
+	notifier "github.com/abhinavxd/libredesk/internal/notification"
+	nmodels "github.com/abhinavxd/libredesk/internal/notification/models"
 	"github.com/abhinavxd/libredesk/internal/stringutil"
 	"github.com/abhinavxd/libredesk/internal/user/models"
 	"github.com/valyala/fasthttp"
@@ -15,7 +18,8 @@ import (
 )
 
 type createContactNoteReq struct {
-	Note string `json:"note"`
+	Note          string `json:"note"`
+	NotifyUserIDs []int  `json:"notify_user_ids,omitempty"`
 }
 
 type blockContactReq struct {
@@ -200,7 +204,12 @@ func handleGetContactNotes(r *fastglue.Request) error {
 	return r.SendEnvelope(notes)
 }
 
-// handleCreateContactNote creates a note for a contact.
+// handleCreateContactNote creates a note for a contact. If the request also
+// carries notify_user_ids the agent gets a Freshdesk-style "@-mention without
+// the @" — the listed agents receive an in-app + email notification with the
+// note body excerpted as plain text. Useful for a CS lead leaving a note on
+// a VIP contact and pinging the account manager without having to switch to
+// a conversation just to drop a mention.
 func handleCreateContactNote(r *fastglue.Request) error {
 	var (
 		app          = r.Context.(*App)
@@ -224,7 +233,98 @@ func handleCreateContactNote(r *fastglue.Request) error {
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
+
+	// Dispatch the recipient notifications off the request goroutine so a
+	// slow SMTP server can't block the API response. Failures are logged in
+	// the dispatcher but never surfaced to the agent — the note is already
+	// saved at this point and a missed notification is recoverable.
+	if len(req.NotifyUserIDs) > 0 {
+		go notifyContactNote(app, contactID, auser.ID, req.Note, req.NotifyUserIDs)
+	}
+
 	return r.SendEnvelope(n)
+}
+
+// notifyContactNote fans out an in-app + email notification to each agent the
+// note author selected from the recipients picker. Self-notifications are
+// dropped (no one needs an email about their own action). Email body uses
+// the SanitizeHTML-cleaned note as-is for the in-template blockquote and a
+// plain-text excerpt (HTML2Text + 500-char truncation) for the in-app body.
+func notifyContactNote(app *App, contactID, actorID int, noteHTML string, recipientIDs []int) {
+	if app.notifDispatcher == nil {
+		return
+	}
+
+	// De-dupe and skip the actor.
+	uniq := make(map[int]struct{}, len(recipientIDs))
+	for _, id := range recipientIDs {
+		if id <= 0 || id == actorID {
+			continue
+		}
+		uniq[id] = struct{}{}
+	}
+	if len(uniq) == 0 {
+		return
+	}
+
+	contact, err := app.user.GetContactOrVisitor(contactID, "")
+	if err != nil {
+		app.lo.Warn("contact note notify: failed to fetch contact", "contact_id", contactID, "error", err)
+		return
+	}
+	author, err := app.user.GetAgent(actorID, "")
+	if err != nil {
+		app.lo.Warn("contact note notify: failed to fetch author", "actor_id", actorID, "error", err)
+		return
+	}
+
+	contactName := strings.TrimSpace(contact.FirstName + " " + contact.LastName)
+	if contactName == "" {
+		contactName = contact.Email.String
+	}
+	authorName := strings.TrimSpace(author.FirstName + " " + author.LastName)
+
+	// Plain-text excerpt for the in-app body (the in-app surface doesn't
+	// render HTML — long sanitised note bodies otherwise show as raw tags).
+	excerpt := stringutil.HTML2Text(noteHTML)
+	if len(excerpt) > 500 {
+		excerpt = excerpt[:500] + "..."
+	}
+
+	// Resolve email addresses in the same loop so we can keep the per-
+	// recipient email slice aligned with the recipient ID slice for
+	// SendWithEmails. Recipients without an email get an empty
+	// EmailNotification slot — the dispatcher then sends the in-app
+	// notification only.
+	var ids []int
+	var emails []notifier.EmailNotification
+	subject := app.i18n.Ts("notification.contactNote.subject", "contact", contactName)
+	body := fmt.Sprintf("<p><strong>%s</strong> added a note on contact <strong>%s</strong>:</p><blockquote>%s</blockquote>",
+		authorName, contactName, noteHTML)
+	for id := range uniq {
+		ids = append(ids, id)
+
+		agent, err := app.user.GetAgent(id, "")
+		if err != nil || !agent.Email.Valid || agent.Email.String == "" {
+			emails = append(emails, notifier.EmailNotification{})
+			continue
+		}
+		emails = append(emails, notifier.EmailNotification{
+			Recipients: []string{agent.Email.String},
+			Subject:    subject,
+			Content:    body,
+		})
+	}
+
+	app.notifDispatcher.SendWithEmails(notifier.Notification{
+		Type:           nmodels.NotificationTypeContactNote,
+		RecipientIDs:   ids,
+		Title:          app.i18n.Ts("notification.contactNote.title", "author", authorName, "contact", contactName),
+		Body:           null.StringFrom(excerpt),
+		ActorID:        null.IntFrom(actorID),
+		ActorFirstName: author.FirstName,
+		ActorLastName:  author.LastName,
+	}, emails)
 }
 
 // handleDeleteContactNote deletes a note for a contact.

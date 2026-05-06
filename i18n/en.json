@@ -1018,6 +1018,8 @@
   "navigation.logout": "Logout",
   "navigation.reassignReplies": "Reassign replies",
   "notification.addedAsFollower": "{author} added you as a follower on #{referenceNumber}",
+  "notification.contactNote.subject": "New note on contact: {contact}",
+  "notification.contactNote.title": "{author} added a note on {contact}",
   "notification.conversationAssigned": "Conversation assigned to you #{referenceNumber}",
   "notification.customerReplied": "{author} replied in #{referenceNumber}",
   "notification.mentionedInConversation": "{author} mentioned you in #{referenceNumber}",

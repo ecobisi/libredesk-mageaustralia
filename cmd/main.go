@@ -104,6 +104,7 @@ type App struct {
 	search           *search.Manager
 	activityLog      *activitylog.Manager
 	notifier         *notifier.Service
+	notifDispatcher  *notifier.Dispatcher
 	userNotification *notifier.UserNotificationManager
 	customAttribute  *customAttribute.Manager
 	report           *report.Manager
@@ -277,6 +278,7 @@ func main() {
 		priority:         priority,
 		tmpl:             template,
 		notifier:         notifier,
+		notifDispatcher:  notifDispatcher,
 		consts:           atomic.Value{},
 		conversation:     conversation,
 		automation:       automation,

@@ -17,6 +17,7 @@ const (
 	NotificationTypeSLABreach      NotificationType = "sla_breach"
 	NotificationTypeNewReply       NotificationType = "new_reply"
 	NotificationTypeFollowerAdded  NotificationType = "follower_added"
+	NotificationTypeContactNote    NotificationType = "contact_note"
 )
 
 // UserNotification represents an in-app notification for a user.
