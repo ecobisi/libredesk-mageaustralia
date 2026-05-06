@@ -528,17 +528,52 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   /**
-   * Fetches messages for a conversation if not already present in the cache.
-   * 
+   * Returns true if the message cache for `uuid` is older than the
+   * conversation's server-reported last_message_at. Used by fetchMessages
+   * to decide whether to drop the cache and refetch on revisit. Only
+   * compares when both sides have a valid timestamp — otherwise treats
+   * the cache as fresh (conservative: never refetch on missing data).
+   *
    * @param {string} uuid
-   * @returns 
+   * @param {object[]} cachedMessages - non-empty list from MessageCache.getAllPagesMessages
+   * @returns {boolean}
+   */
+  function isMessageCacheStale (uuid, cachedMessages) {
+    const conv = conversations.data?.find(c => c.uuid === uuid)
+    const serverLast = conv?.last_message_at
+    if (!serverLast) return false
+    // Cached messages are sorted ascending by created_at; tail is newest.
+    const cachedLast = cachedMessages[cachedMessages.length - 1]?.created_at
+    if (!cachedLast) return false
+    const serverMs = new Date(serverLast).getTime()
+    const cachedMs = new Date(cachedLast).getTime()
+    if (Number.isNaN(serverMs) || Number.isNaN(cachedMs)) return false
+    return serverMs > cachedMs
+  }
+
+  /**
+   * Fetches messages for a conversation if not already present in the cache.
+   *
+   * @param {string} uuid
+   * @returns
    */
   async function fetchMessages (uuid, fetchNextPage = false) {
     // Messages are already cached?
     let hasMessages = messages.data.getAllPagesMessages(uuid)
     if (hasMessages.length > 0 && !fetchNextPage) {
-      markConversationAsRead(uuid)
-      return
+      // Cache hit. But if the row in `conversations.data` reports a newer
+      // last_message_at than the newest cached message, the cache went stale
+      // (typically: WebSocket dropped or the agent backgrounded the tab while
+      // messages came in on a different conversation). Purge and refetch so
+      // the agent sees fresh state without needing a hard refresh. UX20.
+      if (isMessageCacheStale(uuid, hasMessages)) {
+        messages.data.purgeConversation(uuid)
+        incrementMessageVersion()
+        // Fall through to the fetch path below.
+      } else {
+        markConversationAsRead(uuid)
+        return
+      }
     }
 
     // Fetch messages from server.
