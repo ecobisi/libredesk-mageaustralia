@@ -962,6 +962,10 @@ func handleRestoreFromTrash(r *fastglue.Request) error {
 
 
 // handlePermanentDeleteConversation permanently deletes a trashed conversation.
+// Refuses to act on non-Trashed conversations: the endpoint is reachable by any
+// agent with `conversations:update_status` and without this guard a curl/script
+// could nuke any conversation UUID directly, bypassing the trash → restore → delete
+// UX flow.
 func handlePermanentDeleteConversation(r *fastglue.Request) error {
 	var (
 		app   = r.Context.(*App)
@@ -972,8 +976,14 @@ func handlePermanentDeleteConversation(r *fastglue.Request) error {
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
-	if _, err := enforceConversationAccess(app, uuid, user); err != nil {
+	conv, err := enforceConversationAccess(app, uuid, user)
+	if err != nil {
 		return sendErrorEnvelope(r, err)
+	}
+	if conv.Status.String != cmodels.StatusTrashed {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+			"Conversation must be in the trash before it can be permanently deleted.",
+			nil, envelope.InputError)
 	}
 	if err := app.conversation.DeleteConversation(uuid); err != nil {
 		return sendErrorEnvelope(r, err)
