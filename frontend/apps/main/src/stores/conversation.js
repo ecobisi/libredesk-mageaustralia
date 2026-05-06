@@ -23,6 +23,11 @@ export const useConversationStore = defineStore('conversation', () => {
   const currentBCC = ref([])
   const currentCC = ref([])
   const macros = ref({})
+  // FS8: Tracks whether the New Conversation dialog is mounted. Used by the
+  // command picker to route a chosen macro into NEW_CONVERSATION context even
+  // if the nestedCommand emitter is in some other state (defensive fallback —
+  // the primary signal is still the emitter's `apply-macro-to-new-conversation`).
+  const isNewConversationOpen = ref(false)
   const drafts = ref(new Map())
 
   // Bulk selection state
@@ -1125,6 +1130,7 @@ export const useConversationStore = defineStore('conversation', () => {
 
   return {
     macros,
+    isNewConversationOpen,
     conversations,
     conversation,
     messages,

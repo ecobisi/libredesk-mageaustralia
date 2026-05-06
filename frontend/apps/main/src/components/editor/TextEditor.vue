@@ -699,10 +699,22 @@ watch(
 )
 
 // Insert content at cursor position when insertContent prop changes.
+// FS8: When the editor isn't focused (e.g. user clicked the macro picker
+// without first clicking into the editor), TipTap's insertContent silently
+// no-ops because it has no selection to insert at. Focus first so the macro
+// actually lands. cursor='start' lets the caller decide where if they pre-
+// focused; if not, the macro lands at the start of the document, which is
+// the same spot v1.0.3 lands at.
 watch(
   () => props.insertContent,
   (val) => {
-    if (val) editor.value?.commands.insertContent(val)
+    if (val == null || val === '') return
+    const ed = editor.value
+    if (!ed) return
+    if (!ed.isFocused) {
+      ed.commands.focus('start')
+    }
+    ed.commands.insertContent(val)
   }
 )
 

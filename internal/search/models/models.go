@@ -23,6 +23,19 @@ type MessageResult struct {
 	ConversationStatus          string    `db:"conversation_status" json:"conversation_status"`
 }
 
+// UnifiedResult is a single row from the unified search. Captures conversation
+// identity plus a snippet of the most relevant message body so the search UI
+// can render a single flat list (vs the previous tabs-by-source layout).
+type UnifiedResult struct {
+	Total           int       `db:"total" json:"-"`
+	CreatedAt       time.Time `db:"created_at" json:"created_at"`
+	UUID            string    `db:"uuid" json:"uuid"`
+	ReferenceNumber string    `db:"reference_number" json:"reference_number"`
+	Subject         string    `db:"subject" json:"subject"`
+	Status          string    `db:"status" json:"status"`
+	Snippet         string    `db:"snippet" json:"snippet"`
+}
+
 type ContactResult struct {
 	CreatedAt      time.Time   `db:"created_at" json:"created_at"`
 	FirstName      string      `db:"first_name" json:"first_name"`

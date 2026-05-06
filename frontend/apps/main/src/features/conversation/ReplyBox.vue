@@ -123,6 +123,7 @@
       >
         <ReplyBoxContent
           v-if="isEditorFullscreen"
+          ref="replyBoxContentRef"
           :isFullscreen="true"
           :aiPrompts="aiPrompts"
           :isSending="isSending"
@@ -681,18 +682,24 @@ const handleDeleteDraft = () => {
 }
 
 /**
- * Watches for changes in the conversation's macro id and update message content.
+ * Watches for changes in the conversation's macro id and inject macro body
+ * into the editor at the cursor.
+ *
+ * FS8: Previous behaviour replaced the entire htmlContent with the macro
+ * body, wiping any draft the agent had typed and ignoring cursor position.
+ * Now we hand off to ReplyBoxContent.insertMacro which uses TipTap's
+ * insertContent (placement at cursor, with placeholder substitution against
+ * the loaded conversation's contact). This matches v1.0.3 behaviour and
+ * means an agent can pad a macro between typed sentences instead of choosing
+ * "macro xor draft".
  */
 watch(
   () => conversationStore.getMacro('reply').id,
   (newId) => {
-    // No macro set.
     if (!newId) return
-
-    // If macro has message content, set it in the editor.
-    if (conversationStore.getMacro('reply').message_content) {
-      htmlContent.value = conversationStore.getMacro('reply').message_content
-    }
+    const macroContent = conversationStore.getMacro('reply').message_content
+    if (!macroContent) return
+    replyBoxContentRef.value?.insertMacro(macroContent)
   },
   { deep: true }
 )

@@ -449,5 +449,40 @@ watch(
 const focus = (position = 'start') => {
   editorRef.value?.focus(position)
 }
-defineExpose({ focus })
+
+// FS8: Resolve the {{contact.x}} placeholder shortcut subset that v1.0.3
+// supports for at-the-cursor macro insertion. Server-side macro rendering
+// has its own template engine; this is a client-side fast-path so an agent
+// can pick a macro mid-reply and have the contact's name land immediately
+// without a round-trip. Keep this list deliberately narrow — anything more
+// elaborate (case attributes, custom fields) belongs on the backend.
+function replacePlaceholders (html) {
+  const contact = conversationStore.current?.contact || {}
+  const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(' ')
+  const replacements = {
+    '{{contact.first_name}}': contact.first_name || '',
+    '{{contact.last_name}}': contact.last_name || '',
+    '{{contact.full_name}}': fullName,
+    '{{contact.email}}': contact.email || '',
+    '{{contact.phone}}': contact.phone_number || ''
+  }
+  let result = html
+  for (const [placeholder, value] of Object.entries(replacements)) {
+    result = result.replaceAll(placeholder, value)
+  }
+  return result
+}
+
+// FS8: Push a macro body through the editor's `insertContent` prop watcher.
+// The undefined → nextTick → value pattern forces reactivity so applying the
+// same macro twice in a row still triggers the editor watcher. TextEditor's
+// watcher focuses the editor (if needed) and inserts at cursor.
+function insertMacro (html) {
+  insertContent.value = undefined
+  nextTick(() => {
+    insertContent.value = replacePlaceholders(html)
+  })
+}
+
+defineExpose({ focus, insertMacro })
 </script>

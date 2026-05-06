@@ -1115,6 +1115,20 @@ func (m *Manager) NotifyAssignment(userIDs []int, conversation models.Conversati
 		return fmt.Errorf("fetching agent: %w", err)
 	}
 
+	// FS8: Fetch the latest public incoming message so the assignment email
+	// template can include a body preview (admins can drop {{ .Message.Content }}
+	// into their template). Best-effort — a missing latest message just leaves
+	// the field blank, never blocks the notification.
+	var latestMsg models.Message
+	if err := m.q.GetLatestMessage.Get(&latestMsg,
+		conversation.ID,
+		pq.Array([]string{models.MessageIncoming}),
+		pq.Array([]string{models.MessageStatusReceived}),
+		true, // m.private = NOT $4 → public messages only
+	); err != nil {
+		m.lo.Warn("could not fetch latest message for assignment notification", "conversation_id", conversation.ID, "error", err)
+	}
+
 	// Render email template.
 	content, subject, err := m.template.RenderStoredEmailTemplate(template.TmplConversationAssigned,
 		map[string]any{
@@ -1123,6 +1137,10 @@ func (m *Manager) NotifyAssignment(userIDs []int, conversation models.Conversati
 				"Subject":         conversation.Subject.String,
 				"Priority":        conversation.Priority.String,
 				"UUID":            conversation.UUID,
+			},
+			"Message": map[string]any{
+				"Content":     latestMsg.Content,
+				"TextContent": latestMsg.TextContent,
 			},
 			"Contact": map[string]any{
 				"FirstName": conversation.Contact.FirstName,

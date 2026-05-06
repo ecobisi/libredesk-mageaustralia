@@ -101,6 +101,7 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.GET("/api/v1/conversations/search", perm(handleSearchConversations, "conversations:read"))
 	g.GET("/api/v1/messages/search", perm(handleSearchMessages, "messages:read"))
 	g.GET("/api/v1/contacts/search", perm(handleSearchContacts, "contacts:read"))
+	g.GET("/api/v1/search", perm(handleUnifiedSearch, "conversations:read"))
 
 	// Views.
 	g.GET("/api/v1/views/me", perm(handleGetUserViews, "view:manage"))

@@ -459,6 +459,10 @@ const formSchema = z.object({
 onUnmounted(() => {
   clearMediaFiles()
   conversationStore.resetMacro(MACRO_CONTEXT.NEW_CONVERSATION)
+  // FS8: Mirror the onMounted flag set so the store accurately reflects
+  // whether the new-conversation dialog is open. CommandBox uses this as a
+  // fallback signal when routing a chosen macro.
+  conversationStore.isNewConversationOpen = false
   emitter.emit(EMITTER_EVENTS.SET_NESTED_COMMAND, {
     command: null,
     open: false
@@ -467,6 +471,8 @@ onUnmounted(() => {
 
 onMounted(() => {
   macroStore.setCurrentView('starting_conversation')
+  // FS8: see onUnmounted comment.
+  conversationStore.isNewConversationOpen = true
   emitter.emit(EMITTER_EVENTS.SET_NESTED_COMMAND, {
     command: 'apply-macro-to-new-conversation',
     open: false
@@ -634,15 +640,40 @@ const createConversation = form.handleSubmit(async (values) => {
 })
 
 /**
- * Watches for changes in the macro id and update message content.
+ * Watches for changes in the macro id and inject the macro body into the
+ * editor with placeholder substitution.
+ *
+ * FS8: Two changes vs the previous implementation —
+ *   1. We resolve `{{contact.first_name}}`-style placeholders against the
+ *      form values the user has typed so far. The new-conversation dialog
+ *      doesn't have a server-side rendered draft (the conversation doesn't
+ *      exist yet), so substitution has to happen here.
+ *   2. We push through the editor's `insertContent` prop instead of replacing
+ *      the form's content field wholesale. The TextEditor watcher will focus
+ *      the editor (if needed) and call commands.insertContent at the cursor —
+ *      so the macro lands where the user is typing rather than blowing away
+ *      anything they've already drafted.
  */
 watch(
   () => conversationStore.getMacro(MACRO_CONTEXT.NEW_CONVERSATION).id,
-  () => {
-    form.setFieldValue(
-      'content',
-      conversationStore.getMacro(MACRO_CONTEXT.NEW_CONVERSATION).message_content
-    )
+  (newId) => {
+    if (!newId) return
+    const macroContent = conversationStore.getMacro(
+      MACRO_CONTEXT.NEW_CONVERSATION
+    ).message_content
+    if (!macroContent) return
+    const fullName = [form.values.first_name, form.values.last_name]
+      .filter(Boolean)
+      .join(' ')
+    const replaced = macroContent
+      .replaceAll('{{contact.first_name}}', form.values.first_name || '')
+      .replaceAll('{{contact.last_name}}', form.values.last_name || '')
+      .replaceAll('{{contact.full_name}}', fullName)
+      .replaceAll('{{contact.email}}', form.values.contact_email || '')
+    insertContent.value = undefined
+    nextTick(() => {
+      insertContent.value = replaced
+    })
   },
   { deep: true }
 )

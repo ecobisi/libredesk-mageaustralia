@@ -1,5 +1,5 @@
 <template>
-  <table class="conversation-table w-full text-sm table-fixed border-collapse">
+  <table class="conversation-table w-full min-w-[900px] text-sm table-fixed border-collapse">
     <colgroup>
       <col :style="{ width: columnWidths.checkbox + 'px' }">
       <col v-for="col in resizableCols" :key="'col-' + col" :style="{ width: columnWidths[col] + 'px' }">

@@ -1,148 +1,82 @@
 <template>
   <div class="max-w-5xl mx-auto p-6 min-h-screen">
-    <Tabs :default-value="defaultTab" v-model="activeTab">
-      <TabsList class="grid w-full mb-6" :class="tabsGridClass">
-        <TabsTrigger v-for="(items, type) in results" :key="type" :value="type">
-          {{ $t(tabLabelKeys[type], 2) }} ({{ items.length }})
-        </TabsTrigger>
-      </TabsList>
-
-      <TabsContent v-for="(items, type) in results" :key="type" :value="type" class="mt-0">
-        <div class="bg-background rounded border overflow-hidden">
-          <!-- No results message -->
-          <div v-if="items.length === 0" class="p-8 text-center text-muted-foreground">
-            <div class="text-lg font-medium mb-2">
-              {{ $t('globals.messages.noResultsFound') }}
-            </div>
-            <div class="text-sm">{{ $t('search.adjustSearchTerms') }}</div>
-          </div>
-
-          <!-- Results list -->
-          <div v-else class="divide-y divide-border">
-            <div
-              v-for="item in items"
-              :key="item.id || item.uuid"
-              class="p-6 hover:bg-accent/50 transition duration-200 ease-in-out group"
-            >
-              <router-link
-                :to="{
-                  name: 'inbox-conversation',
-                  params: {
-                    uuid: type === 'conversations' ? item.uuid : item.conversation_uuid,
-                    type: 'assigned'
-                  }
-                }"
-                class="block"
-              >
-                <div class="flex justify-between items-start">
-                  <div class="flex-grow">
-                    <!-- Reference number and status -->
-                    <div
-                      class="text-sm font-semibold mb-2 text-muted-foreground group-hover:text-primary transition duration-200 flex items-center gap-2"
-                    >
-                      <span>
-                        #{{
-                          type === 'conversations'
-                            ? item.reference_number
-                            : item.conversation_reference_number
-                        }}
-                      </span>
-                      <Badge variant="outline" class="text-xs font-medium">
-                        {{
-                          type === 'conversations'
-                            ? item.status
-                            : item.conversation_status
-                        }}
-                      </Badge>
-                    </div>
-
-                    <!-- Content -->
-                    <div
-                      class="text-foreground font-medium mb-2 text-lg group-hover:text-primary transition duration-200"
-                    >
-                      {{
-                        truncateText(
-                          type === 'conversations' ? item.subject : item.text_content,
-                          100
-                        )
-                      }}
-                    </div>
-
-                    <!-- Timestamp -->
-                    <div class="text-sm text-muted-foreground flex items-center">
-                      <ClockIcon class="h-4 w-4 mr-1" />
-                      {{
-                        formatDate(
-                          type === 'conversations' ? item.created_at : item.conversation_created_at
-                        )
-                      }}
-                    </div>
-                  </div>
-
-                  <!-- Right arrow icon -->
-                  <div
-                    class="bg-secondary rounded-full p-2 group-hover:bg-primary transition duration-200"
-                  >
-                    <ChevronRightIcon
-                      class="h-5 w-5 text-secondary-foreground group-hover:text-primary-foreground"
-                      aria-hidden="true"
-                    />
-                  </div>
+    <p class="text-sm text-muted-foreground mb-4">
+      {{ $t('search.results', { total }) }}
+    </p>
+    <div class="bg-background rounded border overflow-hidden">
+      <div class="divide-y divide-border">
+        <div
+          v-for="item in results"
+          :key="item.uuid"
+          class="p-6 hover:bg-accent/50 transition duration-200 ease-in-out group"
+        >
+          <router-link
+            :to="{
+              name: 'inbox-conversation',
+              params: { uuid: item.uuid, type: 'assigned' }
+            }"
+            class="block"
+          >
+            <div class="flex justify-between items-start">
+              <div class="flex-grow min-w-0">
+                <!-- Reference number + status -->
+                <div
+                  class="text-sm font-semibold mb-1 text-muted-foreground group-hover:text-primary transition duration-200 flex items-center gap-2"
+                >
+                  <span>#{{ item.reference_number }}</span>
+                  <Badge v-if="item.status" variant="outline" class="text-xs font-medium">
+                    {{ item.status }}
+                  </Badge>
                 </div>
-              </router-link>
+                <!-- Subject -->
+                <div
+                  class="text-foreground font-medium mb-2 text-lg group-hover:text-primary transition duration-200"
+                >
+                  {{ item.subject || $t('conversation.list.noSubject') }}
+                </div>
+                <!-- Snippet (truncated message body) -->
+                <div
+                  v-if="item.snippet"
+                  class="text-sm text-muted-foreground mb-2 line-clamp-2"
+                >
+                  {{ truncateText(item.snippet, 200) }}
+                </div>
+                <!-- Timestamp -->
+                <div class="text-sm text-muted-foreground flex items-center">
+                  <ClockIcon class="h-4 w-4 mr-1" />
+                  {{ formatDate(item.created_at) }}
+                </div>
+              </div>
+              <div
+                class="bg-secondary rounded-full p-2 group-hover:bg-primary transition duration-200 shrink-0 ml-3"
+              >
+                <ChevronRightIcon
+                  class="h-5 w-5 text-secondary-foreground group-hover:text-primary-foreground"
+                  aria-hidden="true"
+                />
+              </div>
             </div>
-          </div>
+          </router-link>
         </div>
-      </TabsContent>
-    </Tabs>
+      </div>
+    </div>
   </div>
 </template>
+
 <script setup>
-import { computed, ref, watch } from 'vue'
 import { ChevronRightIcon, ClockIcon } from 'lucide-vue-next'
 import { format, parseISO } from 'date-fns'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@shared-ui/components/ui/tabs'
 import { Badge } from '@shared-ui/components/ui/badge'
 
-const tabLabelKeys = {
-  conversations: 'globals.terms.conversation',
-  messages: 'globals.terms.message'
-}
-
-const props = defineProps({
+defineProps({
   results: {
-    type: Object,
+    type: Array,
     required: true
-  }
-})
-
-// Get the first available tab as default
-const defaultTab = computed(() => {
-  const types = Object.keys(props.results)
-  return types.length > 0 ? types[0] : ''
-})
-
-const activeTab = ref('')
-
-// Watch for changes in results and set the first tab as active
-watch(
-  () => props.results,
-  (newResults) => {
-    const types = Object.keys(newResults)
-    if (types.length > 0 && !activeTab.value) {
-      activeTab.value = types[0]
-    }
   },
-  { immediate: true }
-)
-
-// Dynamic grid class based on number of tabs
-const tabsGridClass = computed(() => {
-  const tabCount = Object.keys(props.results).length
-  if (tabCount <= 2) return 'grid-cols-2'
-  if (tabCount <= 3) return 'grid-cols-3'
-  if (tabCount <= 4) return 'grid-cols-4'
-  return 'grid-cols-5'
+  total: {
+    type: Number,
+    default: 0
+  }
 })
 
 const formatDate = (dateString) => {

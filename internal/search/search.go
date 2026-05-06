@@ -37,6 +37,7 @@ type queries struct {
 	SearchConversationsByContactEmail *sqlx.Stmt `query:"search-conversations-by-contact-email"`
 	SearchMessages                    *sqlx.Stmt `query:"search-messages"`
 	SearchContacts                    *sqlx.Stmt `query:"search-contacts"`
+	SearchUnified                     *sqlx.Stmt `query:"search-unified"`
 }
 
 // New creates a new search manager
@@ -72,6 +73,30 @@ func (s *Manager) Messages(query string) ([]models.MessageResult, error) {
 		return nil, envelope.NewError(envelope.GeneralError, s.i18n.T("globals.messages.somethingWentWrong"), nil)
 	}
 	return results, nil
+}
+
+// UnifiedResponse wraps unified search results with pagination metadata.
+type UnifiedResponse struct {
+	Results []models.UnifiedResult `json:"results"`
+	Total   int                    `json:"total"`
+	Page    int                    `json:"page"`
+}
+
+// Unified performs a single search across conversations and messages with
+// pagination. Replaces the separate Conversations/Messages calls the UI used
+// to make in parallel — see FS8.
+func (s *Manager) Unified(query string, page, pageSize int) (*UnifiedResponse, error) {
+	var results = make([]models.UnifiedResult, 0)
+	offset := (page - 1) * pageSize
+	if err := s.q.SearchUnified.Select(&results, query, pageSize, offset); err != nil {
+		s.lo.Error("error in unified search", "error", err)
+		return nil, envelope.NewError(envelope.GeneralError, s.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	total := 0
+	if len(results) > 0 {
+		total = results[0].Total
+	}
+	return &UnifiedResponse{Results: results, Total: total, Page: page}, nil
 }
 
 // Contacts searches contacts based on the query
