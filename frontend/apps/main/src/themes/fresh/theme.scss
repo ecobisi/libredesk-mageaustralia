@@ -305,6 +305,27 @@
   .h-12.border-b {
     background-color: hsl(220 13% 14%);
   }
+  // Conversation table view — light-mode hardcoded thead bg and row
+  // hover/selected colours leak into dark mode otherwise. Override with
+  // dark equivalents matching the same teal-tinted accent.
+  .conversation-table {
+    thead {
+      background-color: hsl(220 13% 14%);
+      th {
+        color: hsl(220 9% 65%);
+        border-bottom: 2px solid hsl(220 13% 20%);
+      }
+    }
+    .conversation-table-row {
+      &:hover {
+        background-color: hsl(174 30% 16%);
+      }
+      &.bg-accent\/60 {
+        background-color: hsl(174 30% 22%);
+        border-left-color: hsl(174 62% 50%);
+      }
+    }
+  }
   // Light-mode hardcoded text color in fresh's typography section punches
   // through on dark message bubbles. Restore foreground.
   .message-bubble .native-html {
