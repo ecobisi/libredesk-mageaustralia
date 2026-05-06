@@ -250,6 +250,14 @@ func (m *Manager) sendOutgoingMessage(message models.Message) {
 		}
 	}
 
+	// Mark as sending in the DB before the SMTP call so the pending-message
+	// scanner cannot pick this row up again. The in-memory
+	// outgoingProcessingMessages map already excludes in-flight IDs, but it
+	// does not survive a process restart and offers a narrow race window
+	// when SMTP is slow (high-latency relays, retries). Persisting the
+	// status flip closes both holes.
+	m.UpdateMessageStatus(message.UUID, models.MessageStatusSending)
+
 	// Send message
 	err = inb.Send(outbound)
 	if err != nil && err != livechat.ErrClientNotConnected {

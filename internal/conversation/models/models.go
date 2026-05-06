@@ -44,6 +44,7 @@ var (
 	MentionTypeTeam  = "team"
 
 	MessageStatusPending  = "pending"
+	MessageStatusSending  = "sending"
 	MessageStatusSent     = "sent"
 	MessageStatusFailed   = "failed"
 	MessageStatusReceived = "received"
