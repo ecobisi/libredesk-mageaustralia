@@ -163,14 +163,25 @@ RETURNING user_id;
 INSERT INTO users (email, type, first_name, last_name, "password", avatar_url, external_user_id, custom_attributes)
 VALUES ($1, 'contact', $2, $3, $4, $5, $6, $7)
 ON CONFLICT (external_user_id) WHERE type = 'contact' AND deleted_at IS NULL AND external_user_id IS NOT NULL
-DO UPDATE SET email = EXCLUDED.email, first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, updated_at = now()
+DO UPDATE SET email = EXCLUDED.email, updated_at = now(),
+-- Only overwrite the stored name when the incoming name is non-empty AND the
+-- stored name is empty or looks domain-like (e.g. "support.tenniswarehouse").
+-- Protects good display names from being clobbered when a later request
+-- (typically an SDK init with no display name) carries a derived/garbage name.
+first_name = CASE WHEN EXCLUDED.first_name != '' AND (users.first_name LIKE '%.%' OR users.first_name = '' OR users.first_name IS NULL) THEN EXCLUDED.first_name ELSE users.first_name END,
+last_name = CASE WHEN EXCLUDED.first_name != '' AND (users.first_name LIKE '%.%' OR users.first_name = '' OR users.first_name IS NULL) THEN EXCLUDED.last_name ELSE users.last_name END
 RETURNING id;
 
 -- name: insert-contact-without-external-id
 INSERT INTO users (email, type, first_name, last_name, "password", avatar_url, external_user_id)
 VALUES ($1, 'contact', $2, $3, $4, $5, NULL)
 ON CONFLICT (email) WHERE type = 'contact' AND deleted_at IS NULL AND external_user_id IS NULL
-DO UPDATE SET updated_at = now()
+DO UPDATE SET updated_at = now(),
+-- Same name-protection logic as the with-ext-id variant. Race-condition path
+-- (Go pre-checks via GetContactByEmail) but still defends against concurrent
+-- inserts overwriting a good stored name with a domain-like one.
+first_name = CASE WHEN EXCLUDED.first_name != '' AND (users.first_name LIKE '%.%' OR users.first_name = '' OR users.first_name IS NULL) THEN EXCLUDED.first_name ELSE users.first_name END,
+last_name = CASE WHEN EXCLUDED.first_name != '' AND (users.first_name LIKE '%.%' OR users.first_name = '' OR users.first_name IS NULL) THEN EXCLUDED.last_name ELSE users.last_name END
 RETURNING id;
 
 -- name: get-contact-by-email
