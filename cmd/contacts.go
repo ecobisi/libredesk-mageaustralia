@@ -22,6 +22,12 @@ type blockContactReq struct {
 	Enabled bool `json:"enabled"`
 }
 
+type quickCreateContactReq struct {
+	Email     string `json:"email"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
 // handleGetContacts returns a list of contacts from the database.
 func handleGetContacts(r *fastglue.Request) error {
 	var (
@@ -293,4 +299,46 @@ func handleBlockContact(r *fastglue.Request) error {
 		return sendErrorEnvelope(r, err)
 	}
 	return r.SendEnvelope(contact)
+}
+
+// handleQuickCreateContact creates a contact from email/first/last name only
+// (no phone, no avatar, no custom attributes). Used by the conversation
+// sidebar "change contact" affordance when the agent searches for a contact
+// that doesn't exist yet — a one-step inline create+assign instead of
+// kicking the agent over to the full contacts admin form. Reuses the
+// existing CreateContact upsert path, so submitting with an email that
+// already belongs to a contact returns that contact's id rather than
+// erroring.
+func handleQuickCreateContact(r *fastglue.Request) error {
+	var (
+		app = r.Context.(*App)
+		req = quickCreateContactReq{}
+	)
+	if err := r.Decode(&req, "json"); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("errors.parsingRequest"), nil, envelope.InputError)
+	}
+
+	email := strings.TrimSpace(req.Email)
+	if email == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.empty", "name", "email"), nil, envelope.InputError)
+	}
+	if !stringutil.ValidEmail(email) {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("validation.invalidEmail"), nil, envelope.InputError)
+	}
+
+	contact := &models.User{
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+		Email:     null.StringFrom(email),
+	}
+	if err := app.user.CreateContact(contact); err != nil {
+		app.lo.Error("error creating contact via quick-create", "error", err)
+		return sendErrorEnvelope(r, envelope.NewError(envelope.GeneralError, app.i18n.T("globals.messages.somethingWentWrong"), nil))
+	}
+
+	created, err := app.user.GetContactOrVisitor(contact.ID, "")
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(created)
 }

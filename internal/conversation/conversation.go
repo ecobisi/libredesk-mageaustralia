@@ -286,6 +286,7 @@ type queries struct {
 	UpdateConversationPriority         *sqlx.Stmt `query:"update-conversation-priority"`
 	UpdateConversationStatus           *sqlx.Stmt `query:"update-conversation-status"`
 	UpdateConversationSubject          *sqlx.Stmt `query:"update-conversation-subject"`
+	UpdateConversationContact          *sqlx.Stmt `query:"update-conversation-contact"`
 	UpdateConversationLastMessage      *sqlx.Stmt `query:"update-conversation-last-message"`
 	InsertConversationParticipant      *sqlx.Stmt `query:"insert-conversation-participant"`
 	DeleteConversationParticipant      *sqlx.Stmt `query:"delete-conversation-participant"`
@@ -914,6 +915,26 @@ func (c *Manager) UpdateConversationSubject(uuid, subject string, _ umodels.User
 	// subject without a refresh. The store-side mergeConversationUpdate
 	// shallow-merges this into conversation.data.
 	c.BroadcastConversationUpdate(uuid, map[string]any{"subject": subject})
+	return nil
+}
+
+// UpdateConversationContact swaps the conversation's contact_id to a different
+// existing contact. Used by the sidebar "change contact" affordance when an
+// agent realises the original sender was the wrong person (most often when a
+// shared inbox receives a forwarded thread and the auto-detected contact is
+// the forwarder rather than the actual customer). Caller is responsible for
+// verifying the contact exists; the FK on conversations.contact_id will
+// otherwise reject the update with a generic error. Broadcast so other
+// connected agents see the new contact in the sidebar without a refresh.
+func (c *Manager) UpdateConversationContact(uuid string, contactID int) error {
+	if contactID <= 0 {
+		return envelope.NewError(envelope.InputError, c.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	if _, err := c.q.UpdateConversationContact.Exec(uuid, contactID); err != nil {
+		c.lo.Error("error updating conversation contact", "error", err)
+		return envelope.NewError(envelope.GeneralError, c.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	c.BroadcastConversationUpdate(uuid, map[string]any{"contact_id": contactID})
 	return nil
 }
 

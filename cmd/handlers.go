@@ -81,6 +81,13 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	// from upstream RBAC. Subject is closer in agent-discretion semantics to
 	// status/priority than to tags or assignee.
 	g.PUT("/api/v1/conversations/{uuid}/subject", perm(handleUpdateConversationSubject, "conversations:update_status"))
+	// Contact swap: same conversations:update_status gate as subject — both
+	// are agent-discretion edits to a conversation's identity. The handler
+	// itself uses GetContactOrVisitor to verify the target exists, so an
+	// agent without contacts:read_all can't probe for valid contact ids via
+	// this endpoint either (the access-check error and the not-found error
+	// both surface as a generic somethingWentWrong).
+	g.PUT("/api/v1/conversations/{uuid}/contact", perm(handleUpdateConversationContact, "conversations:update_status"))
 	g.PUT("/api/v1/conversations/{uuid}/trash", perm(handleMoveToTrash, "conversations:update_status"))
 	g.PUT("/api/v1/conversations/{uuid}/restore", perm(handleRestoreFromTrash, "conversations:update_status"))
 	g.DELETE("/api/v1/conversations/{uuid}", perm(handlePermanentDeleteConversation, "conversations:update_status"))
@@ -176,6 +183,10 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.GET("/api/v1/contacts", perm(handleGetContacts, "contacts:read_all"))
 	g.GET("/api/v1/contacts/{id}", perm(handleGetContact, "contacts:read"))
 	g.PUT("/api/v1/contacts/{id}", perm(handleUpdateContact, "contacts:write"))
+	// Inline create from the conversation sidebar "change contact" picker.
+	// Same contacts:write perm as the full contact form — quick-create is
+	// just a thinner UI on top of the same write permission.
+	g.POST("/api/v1/contacts/quick", perm(handleQuickCreateContact, "contacts:write"))
 	g.PUT("/api/v1/contacts/{id}/block", perm(handleBlockContact, "contacts:block"))
 
 	// Contact notes.

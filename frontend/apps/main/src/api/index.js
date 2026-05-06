@@ -328,6 +328,18 @@ const updateConversationSubject = (uuid, subject) =>
       'Content-Type': 'application/json'
     }
   })
+const updateConversationContact = (uuid, contactId) =>
+  http.put(`/api/v1/conversations/${uuid}/contact`, { contact_id: contactId }, {
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+const quickCreateContact = (data) =>
+  http.post('/api/v1/contacts/quick', data, {
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
 const updateAssigneeLastSeen = (uuid) => http.put(`/api/v1/conversations/${uuid}/last-seen`)
 const markConversationAsUnread = (uuid) => http.put(`/api/v1/conversations/${uuid}/mark-unread`)
 const getConversationMessage = (cuuid, uuid) =>
@@ -639,6 +651,8 @@ export default {
   updateConversationStatus,
   updateConversationPriority,
   updateConversationSubject,
+  updateConversationContact,
+  quickCreateContact,
   upsertTags,
   updateConversationCustomAttribute,
   updateContactCustomAttribute,

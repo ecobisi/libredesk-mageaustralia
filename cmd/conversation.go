@@ -42,6 +42,10 @@ type subjectUpdateReq struct {
 	Subject string `json:"subject"`
 }
 
+type contactUpdateReq struct {
+	ContactID int `json:"contact_id"`
+}
+
 type tagsUpdateReq struct {
 	Tags []string `json:"tags"`
 }
@@ -572,6 +576,46 @@ func handleUpdateConversationSubject(r *fastglue.Request) error {
 	}
 
 	if err := app.conversation.UpdateConversationSubject(uuid, req.Subject, user); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(true)
+}
+
+// handleUpdateConversationContact swaps the contact on a conversation. The
+// sidebar "change contact" affordance posts here after the agent picks (or
+// quick-creates) a different contact. Wrapped in enforceConversationAccess so
+// an agent without access to a conversation can't reassign its contact by
+// guessing the UUID. Verifies the target contact exists before updating, so
+// the FK rejection path is never reached and the agent gets a clearer error.
+func handleUpdateConversationContact(r *fastglue.Request) error {
+	var (
+		app   = r.Context.(*App)
+		uuid  = r.RequestCtx.UserValue("uuid").(string)
+		auser = r.RequestCtx.UserValue("user").(amodels.User)
+		req   = contactUpdateReq{}
+	)
+
+	if err := r.Decode(&req, "json"); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("errors.parsingRequest"), nil, envelope.InputError)
+	}
+	if req.ContactID <= 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.empty", "name", "contact_id"), nil, envelope.InputError)
+	}
+
+	user, err := app.user.GetAgent(auser.ID, "")
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	if _, err := enforceConversationAccess(app, uuid, user); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+
+	// Verify the new contact exists (covers visitors too).
+	if _, err := app.user.GetContactOrVisitor(req.ContactID, ""); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+
+	if err := app.conversation.UpdateConversationContact(uuid, req.ContactID); err != nil {
 		return sendErrorEnvelope(r, err)
 	}
 	return r.SendEnvelope(true)

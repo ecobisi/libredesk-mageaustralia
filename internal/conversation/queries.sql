@@ -379,6 +379,12 @@ SET subject = $2,
     updated_at = NOW()
 WHERE uuid = $1;
 
+-- name: update-conversation-contact
+UPDATE conversations
+SET contact_id = $2,
+    updated_at = NOW()
+WHERE uuid = $1;
+
 -- name: upsert-user-last-seen
 INSERT INTO conversation_last_seen (user_id, conversation_id, last_seen_at)
 VALUES ($1, (SELECT id FROM conversations WHERE uuid = $2), NOW())
