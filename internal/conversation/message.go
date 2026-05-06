@@ -750,6 +750,18 @@ func (m *Manager) InsertMessage(message *models.Message) error {
 		m.mediaStore.Attach(media.ID, mmodels.ModelMessages, message.ID)
 	}
 
+	// Inline pasted/dropped images in the reply editor are uploaded before
+	// the message exists (model_id=NULL), so they aren't covered by the
+	// message.Media loop above. Scan the outbound HTML for /uploads/<uuid>
+	// references and link them to this message, so the orphan-cleanup job
+	// doesn't reap them after 24h.
+	inlineUploadRe := regexp.MustCompile(`/uploads/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`)
+	for _, match := range inlineUploadRe.FindAllStringSubmatch(message.Content, -1) {
+		if len(match) >= 2 {
+			m.mediaStore.AttachByUUID(match[1], mmodels.ModelMessages, message.ID)
+		}
+	}
+
 	// Auto-add the sender as a conversation participant only when the sender
 	// is a contact. Agents follow conversations explicitly via the UX5
 	// follower controls — auto-following every agent who replies would flood

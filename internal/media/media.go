@@ -93,6 +93,7 @@ type queries struct {
 	GetByUUID               *sqlx.Stmt `query:"get-media-by-uuid"`
 	Delete                  *sqlx.Stmt `query:"delete-media"`
 	Attach                  *sqlx.Stmt `query:"attach-to-model"`
+	AttachByUUID            *sqlx.Stmt `query:"attach-by-uuid"`
 	GetByModel              *sqlx.Stmt `query:"get-model-media"`
 	GetUnlinkedMessageMedia *sqlx.Stmt `query:"get-unlinked-message-media"`
 	ContentIDExists         *sqlx.Stmt `query:"content-id-exists"`
@@ -259,6 +260,21 @@ func (m *Manager) Attach(id int, model string, modelID int) error {
 	if _, err := m.queries.Attach.Exec(id, model, modelID); err != nil {
 		m.lo.Error("error attaching media to model", "model", model, "model_id", modelID, "media_id", id, "error", err)
 		return fmt.Errorf("attaching media;%d to model:%s model_id:%d: %w", id, model, modelID, err)
+	}
+	return nil
+}
+
+// AttachByUUID links a media file (looked up by UUID) to a model, but only if
+// the row isn't already linked. Used for inline pasted/dropped images in the
+// reply editor, which are uploaded ahead of the message being sent and so
+// don't yet have a model_id. InsertMessage scans the outbound HTML for
+// `/uploads/<uuid>` references and calls this so the orphan-cleanup job
+// doesn't reap them. The "only if NULL" guard means stale media that was
+// already attached to a different message stays put.
+func (m *Manager) AttachByUUID(uuid, model string, modelID int) error {
+	if _, err := m.queries.AttachByUUID.Exec(uuid, model, modelID); err != nil {
+		m.lo.Error("error attaching media by uuid", "uuid", uuid, "model", model, "model_id", modelID, "error", err)
+		return fmt.Errorf("attaching media by uuid:%s to model:%s model_id:%d: %w", uuid, model, modelID, err)
 	}
 	return nil
 }

@@ -37,6 +37,12 @@ SET model_type = $2,
     model_id = $3
 WHERE id = $1;
 
+-- name: attach-by-uuid
+UPDATE media
+SET model_type = $2,
+    model_id = $3
+WHERE uuid = $1::uuid AND (model_id IS NULL OR model_id = 0);
+
 -- name: get-model-media
 SELECT id, created_at, updated_at, "uuid", store, filename, content_type, content_id, model_id, model_type, disposition, "size", meta
 FROM media
@@ -46,8 +52,9 @@ WHERE model_type = $1
 -- name: get-unlinked-message-media
 SELECT id, created_at, updated_at, "uuid", store, filename, content_type, content_id, model_id, model_type, disposition, "size", meta
 FROM media
-WHERE model_type = 'messages' 
-  AND (model_id IS NULL OR model_id = 0) 
+WHERE model_type = 'messages'
+  AND (model_id IS NULL OR model_id = 0)
+  AND disposition != 'inline'
   AND created_at < NOW() - INTERVAL '1 day';
 
 -- name: content-id-exists
