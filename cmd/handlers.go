@@ -75,6 +75,7 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.PUT("/api/v1/conversations/{uuid}/subject", perm(handleUpdateConversationSubject, "conversations:update_status"))
 	g.PUT("/api/v1/conversations/{uuid}/trash", perm(handleMoveToTrash, "conversations:update_status"))
 	g.PUT("/api/v1/conversations/{uuid}/restore", perm(handleRestoreFromTrash, "conversations:update_status"))
+	g.DELETE("/api/v1/conversations/{uuid}", perm(handlePermanentDeleteConversation, "conversations:update_status"))
 	g.PUT("/api/v1/conversations/{uuid}/spam", perm(handleMarkAsSpam, "conversations:update_status"))
 	g.PUT("/api/v1/conversations/{uuid}/not-spam", perm(handleMarkAsNotSpam, "conversations:update_status"))
 	g.POST("/api/v1/conversations/merge", perm(handleMergeConversations, "conversations:update_status"))

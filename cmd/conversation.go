@@ -1020,6 +1020,35 @@ func handleRestoreFromTrash(r *fastglue.Request) error {
 	return r.SendEnvelope(true)
 }
 
+// handlePermanentDeleteConversation permanently deletes a trashed conversation
+// (FS13). Gated to Trashed conversations to ensure the only legitimate caller
+// is the bulk-delete affordance on the trash list. The frontend already hides
+// the button outside the trash view, but a defensive status check here prevents
+// an Open conversation from being erased by a hand-rolled DELETE request.
+func handlePermanentDeleteConversation(r *fastglue.Request) error {
+	var (
+		app   = r.Context.(*App)
+		uuid  = r.RequestCtx.UserValue("uuid").(string)
+		auser = r.RequestCtx.UserValue("user").(amodels.User)
+	)
+	user, err := app.user.GetAgent(auser.ID, "")
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	conversation, err := enforceConversationAccess(app, uuid, user)
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	if conversation.Status.String != cmodels.StatusTrashed {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+			app.i18n.T("conversation.permanentDelete.requiresTrash"), nil, envelope.InputError)
+	}
+	if err := app.conversation.DeleteConversation(uuid); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(true)
+}
+
 // handleMarkAsSpam marks a conversation as spam.
 func handleMarkAsSpam(r *fastglue.Request) error {
 	var (

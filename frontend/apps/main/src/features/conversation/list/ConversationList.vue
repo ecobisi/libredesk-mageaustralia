@@ -110,6 +110,21 @@
         {{ t('conversation.trash') }}
       </Button>
 
+      <!-- Permanent delete (FS13): only in the trash view. Opens an AlertDialog
+           so the agent has to actively confirm the destructive action, which
+           drops the rows out of the database with no recovery path. -->
+      <Button
+        v-if="route.params.type === 'trash'"
+        variant="destructive"
+        size="sm"
+        class="h-7 text-xs"
+        :disabled="bulkLoading"
+        @click="deleteConfirmOpen = true"
+      >
+        <Trash2 class="w-3 h-3 mr-1" />
+        {{ t('conversation.bulkActions.deletePermanently') }}
+      </Button>
+
       <Loader2 v-if="bulkLoading" class="w-4 h-4 animate-spin text-muted-foreground ml-2" />
 
       <Button
@@ -316,6 +331,25 @@
         </p>
       </div>
     </div>
+
+    <!-- FS13: confirmation for permanent delete from trash. Standard
+         AlertDialog (not window.confirm) per repo convention. -->
+    <AlertDialog :open="deleteConfirmOpen" @update:open="deleteConfirmOpen = $event">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ t('globals.messages.areYouAbsolutelySure') }}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {{ t('conversation.bulkActions.deletePermanentlyConfirmation', conversationStore.selectedCount, { count: conversationStore.selectedCount }) }}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{{ t('globals.messages.cancel') }}</AlertDialogCancel>
+          <AlertDialogAction @click="bulkDeletePermanently">
+            {{ t('conversation.bulkActions.deletePermanently') }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>
 
@@ -335,6 +369,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@shared-ui/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@shared-ui/components/ui/alert-dialog'
 import { SidebarTrigger } from '@shared-ui/components/ui/sidebar'
 import { useConversationStore } from '@/stores/conversation'
 import { useUsersStore } from '@/stores/users'
@@ -360,6 +404,7 @@ const { t } = useI18n()
 const toast = useToast()
 const { viewMode, setViewMode } = useViewMode()
 const bulkLoading = ref(false)
+const deleteConfirmOpen = ref(false)
 const { conversationsPillBarFields: pillBarFields } = useConversationFilters()
 // Local mirror of store-side adHocFilters: FilterBar drives this directly,
 // the store debounces the actual fetch. Keeping a local ref means the UI
@@ -494,6 +539,19 @@ const bulkUpdatePriority = (priority) => {
 
 const bulkMoveToTrash = () => {
   runBulkAction((uuid) => api.moveToTrash(uuid))
+}
+
+// FS13: permanent delete from trash. runBulkAction's default refresh appends
+// page-1 results to the existing data array, so deleted UUIDs would linger in
+// the in-memory list (processConversationListResponse merges, it doesn't
+// prune). Reset the store first so the follow-up fetch repopulates from a
+// clean slate. Inlined per FS4 convention; v2 prefers call-site composition
+// over a store wrapper helper.
+const bulkDeletePermanently = async () => {
+  deleteConfirmOpen.value = false
+  await runBulkAction((uuid) => api.deleteConversationPermanently(uuid))
+  conversationStore.resetConversations()
+  await conversationStore.fetchFirstPageConversations()
 }
 
 const hasConversations = computed(() => conversationStore.conversationsList.length !== 0)
