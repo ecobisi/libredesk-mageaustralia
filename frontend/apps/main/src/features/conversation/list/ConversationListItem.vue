@@ -165,7 +165,7 @@
                   <ChevronDown class="w-2.5 h-2.5 opacity-50" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" class="max-h-60 overflow-y-auto">
+              <DropdownMenuContent align="end" class="max-h-96 overflow-y-auto">
                 <DropdownMenuItem
                   v-if="conversation.assigned_user_name"
                   @click="unassignAgent"
@@ -201,7 +201,7 @@
                   <ChevronDown class="w-2.5 h-2.5 opacity-50" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" class="max-h-60 overflow-y-auto">
+              <DropdownMenuContent align="end" class="max-h-96 overflow-y-auto">
                 <DropdownMenuItem
                   v-if="conversation.assigned_team_name"
                   @click="unassignTeam"
