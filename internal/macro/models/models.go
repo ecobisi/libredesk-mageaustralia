@@ -21,6 +21,11 @@ type Macro struct {
 	TeamID         *int            `db:"team_id" json:"team_id,string"`
 	UsageCount     int             `db:"usage_count" json:"usage_count"`
 
+	// Per-user MRU. Populated only by GetAllForUser via the macro_user_usage
+	// LEFT JOIN; the global Get / GetAll paths leave this nil. Drives the
+	// per-agent most-recently-used sort in the macro picker.
+	LastUsedAt *time.Time `db:"last_used_at" json:"last_used_at"`
+
 	// Pseudo field — not DB-mapped, populated by the macro handler from the
 	// polymorphic media table (model_type='macros').
 	Attachments []medModels.Media `db:"-" json:"attachments"`

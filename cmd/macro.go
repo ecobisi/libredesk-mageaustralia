@@ -23,10 +23,15 @@ type macroRequest struct {
 	AttachmentIDs []int `json:"attachment_ids"`
 }
 
-// handleGetMacros returns all macros.
+// handleGetMacros returns all macros, sorted by the calling agent's
+// most-recently-used (MP6). Each agent gets their own picker order; the
+// global usage_count column is unaffected.
 func handleGetMacros(r *fastglue.Request) error {
-	var app = r.Context.(*App)
-	macros, err := app.macro.GetAll()
+	var (
+		app   = r.Context.(*App)
+		auser = r.RequestCtx.UserValue("user").(amodels.User)
+	)
+	macros, err := app.macro.GetAllForUser(auser.ID)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
@@ -281,8 +286,13 @@ func handleApplyMacro(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, app.i18n.T("macro.couldNotApply"), nil, envelope.GeneralError)
 	}
 
-	// Increment usage count.
+	// Increment global usage count and per-user MRU tracking (MP6).
+	// MarkUsed failure is non-fatal: the macro applied successfully, the
+	// per-user reorder will just be missed for this apply.
 	app.macro.IncrementUsageCount(macro.ID)
+	if err := app.macro.MarkUsed(user.ID, macro.ID); err != nil {
+		app.lo.Warn("could not record per-user macro usage", "user_id", user.ID, "macro_id", macro.ID, "error", err)
+	}
 
 	if successCount < len(incomingActions) {
 		return r.SendJSON(fasthttp.StatusMultiStatus, map[string]interface{}{

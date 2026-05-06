@@ -253,6 +253,7 @@ import { computed, provide, ref, watch, onMounted, onBeforeUnmount, nextTick } f
 // apps/main/src (and flow through the override resolver where applicable),
 // not against this file's own overrides/ subtree.
 import { useConversationStore } from '@/stores/conversation'
+import { useMacroStore } from '@/stores/macro'
 import { usePresenceStore } from '@/stores/presence'
 import { useUserStore } from '@/stores/user'
 import {
@@ -280,6 +281,7 @@ import { handleHTTPError } from '@shared-ui/utils/http.js'
 import { sendViewConversation } from '@/websocket'
 
 const conversationStore = useConversationStore()
+const macroStore = useMacroStore()
 const presenceStore = usePresenceStore()
 const userStore = useUserStore()
 const emitter = useEmitter()
@@ -518,6 +520,9 @@ async function executePendingSend () {
     if (send.macroID > 0 && send.macroActions?.length > 0) {
       try {
         await api.applyMacro(send.uuid, send.macroID, send.macroActions)
+        // Optimistic MRU reorder so the picker reflects this apply
+        // immediately, ahead of the next /api/v1/macros refetch (MP6).
+        macroStore.markUsedLocal(send.macroID)
       } catch (error) {
         toast.error(error)
       }

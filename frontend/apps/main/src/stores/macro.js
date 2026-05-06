@@ -78,10 +78,31 @@ export const useMacroStore = defineStore('macroStore', () => {
         currentView.value = view
     }
 
+    // Optimistically reorder macros after the agent applies one (MP6). Bumps
+    // the matching macro's last_used_at and re-sorts so the picker reflects
+    // MRU immediately, without waiting for the next /api/v1/macros refetch.
+    // Mirrors the backend's get-all-for-user ORDER BY (last_used_at DESC
+    // NULLS LAST, name ASC) so the optimistic order matches what the next
+    // server fetch will return.
+    const markUsedLocal = (macroId) => {
+        const idx = macroList.value.findIndex(m => String(m.id) === String(macroId))
+        if (idx === -1) return
+        const updated = [...macroList.value]
+        updated[idx] = { ...updated[idx], last_used_at: new Date().toISOString() }
+        updated.sort((a, b) => {
+            const aT = a.last_used_at ? Date.parse(a.last_used_at) : 0
+            const bT = b.last_used_at ? Date.parse(b.last_used_at) : 0
+            if (bT !== aT) return bT - aT
+            return (a.name || '').localeCompare(b.name || '')
+        })
+        macroList.value = updated
+    }
+
     return {
         macroList,
         macroOptions,
         loadMacros,
-        setCurrentView
+        setCurrentView,
+        markUsedLocal
     }
 })

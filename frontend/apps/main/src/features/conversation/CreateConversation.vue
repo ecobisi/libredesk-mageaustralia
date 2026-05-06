@@ -626,6 +626,9 @@ const createConversation = form.handleSubmit(async (values) => {
     if (conversationUUID !== '' && macro?.id && macro?.actions?.length > 0) {
       try {
         await api.applyMacro(conversationUUID, macro.id, macro.actions)
+        // Optimistic MRU reorder so the picker reflects this apply
+        // immediately, ahead of the next /api/v1/macros refetch (MP6).
+        macroStore.markUsedLocal(macro.id)
       } catch (error) {
         toast.error(error)
       }
