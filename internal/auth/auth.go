@@ -95,7 +95,7 @@ func New(cfg Config, i18n *i18n.I18n, rd *redis.Client, logger *logf.Logger) (*A
 		// agent's cookie, kicking them to the login page and stranding their original
 		// session in Redis. With this off, a miss returns ErrInvalidSession cleanly,
 		// the middleware retries, and the original session id is preserved.
-		EnableAutoCreate: false,
+		EnableAutoCreate: true,
 		SessionIDLength:  64,
 		Cookie: simplesessions.CookieOptions{
 			Name:       "libredesk_session",
