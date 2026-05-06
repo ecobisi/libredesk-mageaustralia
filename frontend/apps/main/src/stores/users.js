@@ -13,7 +13,7 @@ export const useUsersStore = defineStore('users', () => {
         label: user.first_name + ' ' + user.last_name,
         value: String(user.id),
         avatar_url: user.avatar_url,
-    })))
+    })).sort((a, b) => a.label.localeCompare(b.label)))
     const fetchUsers = async (force = false) => {
         if (!force && users.value.length) return
         try {
