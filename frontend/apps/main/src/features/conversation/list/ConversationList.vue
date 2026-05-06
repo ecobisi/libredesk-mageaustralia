@@ -186,6 +186,29 @@
 
       <!-- Right-side controls -->
       <div class="flex items-center gap-1 ml-auto shrink-0">
+        <!-- FS23: slide-out filter panel trigger. Coexists with the pill bar:
+             pill bar handles arbitrary fields/operators, the panel surfaces
+             the named-field UX (Status/Agent/Team/Priority/Tags/Dates) that
+             agents are used to from Freshdesk. Badge shows the count of
+             panel-tracked sections that are non-default. -->
+        <Button
+          variant="ghost"
+          size="sm"
+          class="h-7 px-2 text-xs"
+          :class="{ 'text-primary': hasActivePanelFilters }"
+          :aria-label="t('globals.terms.filter', 2)"
+          @click="filterPanelOpen = true"
+        >
+          <SlidersHorizontal class="w-3.5 h-3.5 mr-1" />
+          {{ t('globals.terms.filter', 2) }}
+          <span
+            v-if="hasActivePanelFilters"
+            class="ml-1 bg-primary text-primary-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
+          >
+            {{ activePanelFilterCount }}
+          </span>
+        </Button>
+
         <!-- View-mode switcher -->
         <div class="flex border rounded-md p-0.5">
           <Button
@@ -248,6 +271,11 @@
         </DropdownMenu>
       </div>
     </div>
+
+    <!-- FS23: Filter panel slide-out. Driven from the trigger above; reads
+         and writes its state through the conversation store so it stays in
+         sync with the pill bar and FS3 per-view persistence. -->
+    <ConversationFilterPanel v-model:open="filterPanelOpen" :viewType="currentViewType" />
 
     <!-- Pending updates pill -->
     <div
@@ -372,7 +400,7 @@
 import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { MessageCircleQuestion, MessageCircleWarning, ChevronDown, Loader2, X, LayoutList, Table2, Trash2, RefreshCw } from 'lucide-vue-next'
+import { MessageCircleQuestion, MessageCircleWarning, ChevronDown, Loader2, X, LayoutList, Table2, Trash2, RefreshCw, SlidersHorizontal } from 'lucide-vue-next'
 import { Button } from '@shared-ui/components/ui/button'
 import { Checkbox } from '@shared-ui/components/ui/checkbox'
 import {
@@ -406,6 +434,7 @@ import api from '@/api'
 import { useViewMode } from '@/composables/useViewMode'
 import FilterBar from '@/components/filter/FilterBar.vue'
 import EmptyList from '@/features/conversation/list/ConversationEmptyList.vue'
+import ConversationFilterPanel from '@/features/conversation/list/ConversationFilterPanel.vue'
 import ConversationListItem from '@/features/conversation/list/ConversationListItem.vue'
 import ConversationListItemSkeleton from '@/features/conversation/list/ConversationListItemSkeleton.vue'
 import ConversationTableView from '@/features/conversation/list/ConversationTableView.vue'
@@ -420,6 +449,34 @@ const toast = useToast()
 const { viewMode, setViewMode } = useViewMode()
 const bulkLoading = ref(false)
 const deleteConfirmOpen = ref(false)
+// FS23: state for the slide-out filter panel.
+const filterPanelOpen = ref(false)
+// Drives the @click="filterPanelOpen = true" trigger label state and gates
+// the count badge. Spam/trash views pin status server-side, so don't count
+// status as a user filter there.
+const NO_STATUS_VIEWS = ['spam', 'trash']
+const currentViewType = computed(() => route.params.type || '')
+const activePanelFilterCount = computed(() => {
+  const adHoc = conversationStore.conversations.adHocFilters || []
+  // Each section counts once regardless of how many values are selected
+  // inside it; the panel surfaces ten possible sections so the badge stays
+  // a small integer rather than the raw filter-array length.
+  let count = 0
+  if (adHoc.some(f => f.field === 'assigned_user_id')) count++
+  if (adHoc.some(f => f.field === 'assigned_team_id')) count++
+  if (adHoc.some(f => f.field === 'priority_id')) count++
+  if (adHoc.some(f => f.field === 'tags')) count++
+  if (adHoc.some(f => f.field === 'email')) count++
+  for (const dateField of ['created_at', 'last_message_at', 'closed_at', 'resolved_at', 'next_sla_deadline_at']) {
+    if (adHoc.some(f => f.field === dateField)) count++
+  }
+  if (!NO_STATUS_VIEWS.includes(currentViewType.value)) {
+    const s = conversationStore.conversations.status
+    if (s.length !== 1 || s[0] !== 'Open') count++
+  }
+  return count
+})
+const hasActivePanelFilters = computed(() => activePanelFilterCount.value > 0)
 const { conversationsPillBarFields: pillBarFields } = useConversationFilters()
 // Local mirror of store-side adHocFilters: FilterBar drives this directly,
 // the store debounces the actual fetch. Keeping a local ref means the UI
