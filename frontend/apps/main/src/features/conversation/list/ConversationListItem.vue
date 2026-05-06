@@ -390,7 +390,7 @@ const priorityDotClass = (priority) => {
 const assignAgent = async (agent) => {
   try {
     await api.updateAssignee(props.conversation.uuid, 'user', { assignee_id: parseInt(agent.value) })
-    props.conversation.assigned_user_name = agent.label
+    conversationStore.updateConversationField(props.conversation.uuid, 'assigned_user_name', agent.label)
   } catch (error) {
     toast.error(error)
   }
@@ -399,7 +399,7 @@ const assignAgent = async (agent) => {
 const unassignAgent = async () => {
   try {
     await api.removeAssignee(props.conversation.uuid, 'user')
-    props.conversation.assigned_user_name = null
+    conversationStore.updateConversationField(props.conversation.uuid, 'assigned_user_name', null)
   } catch (error) {
     toast.error(error)
   }
@@ -408,7 +408,7 @@ const unassignAgent = async () => {
 const assignTeam = async (team) => {
   try {
     await api.updateAssignee(props.conversation.uuid, 'team', { assignee_id: parseInt(team.value) })
-    props.conversation.assigned_team_name = team.label
+    conversationStore.updateConversationField(props.conversation.uuid, 'assigned_team_name', team.label)
   } catch (error) {
     toast.error(error)
   }
@@ -417,7 +417,7 @@ const assignTeam = async (team) => {
 const unassignTeam = async () => {
   try {
     await api.removeAssignee(props.conversation.uuid, 'team')
-    props.conversation.assigned_team_name = null
+    conversationStore.updateConversationField(props.conversation.uuid, 'assigned_team_name', null)
   } catch (error) {
     toast.error(error)
   }

@@ -414,6 +414,17 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  // Update a single field on a conversation row in the list. Used by inline
+  // assign/status dropdowns so callers don't mutate `props.conversation`
+  // directly (Vue warns on prop mutation, and the store is the source of
+  // truth for list state).
+  function updateConversationField (uuid, field, value) {
+    const conv = conversations.data?.find(c => c.uuid === uuid)
+    if (conv) {
+      conv[field] = value
+    }
+  }
+
   const currentContactName = computed(() => {
     if (!conversation.data?.contact) return ''
     return conversation.data?.contact.first_name + ' ' + conversation.data?.contact.last_name
@@ -1234,6 +1245,7 @@ export const useConversationStore = defineStore('conversation', () => {
     refreshConversationList,
     resetConversations,
     reFetchConversationsList,
+    updateConversationField,
     updateConversationLastMessage,
     fetchFirstPageConversations,
     fetchStatuses,
