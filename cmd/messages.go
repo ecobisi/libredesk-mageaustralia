@@ -14,6 +14,7 @@ import (
 	cmodels "github.com/abhinavxd/libredesk/internal/conversation/models"
 	"github.com/abhinavxd/libredesk/internal/envelope"
 	imodels "github.com/abhinavxd/libredesk/internal/inbox/models"
+	"github.com/abhinavxd/libredesk/internal/stringutil"
 	umodels "github.com/abhinavxd/libredesk/internal/user/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -284,6 +285,8 @@ func handleUpdatePrivateNote(r *fastglue.Request) error {
 		return sendErrorEnvelope(r, err)
 	}
 
+	// Sanitize HTML to prevent stored XSS/HTML injection.
+	req.Content = stringutil.SanitizeHTML(req.Content)
 	if err := app.conversation.UpdatePrivateNote(uuid, req.Content); err != nil {
 		return sendErrorEnvelope(r, err)
 	}

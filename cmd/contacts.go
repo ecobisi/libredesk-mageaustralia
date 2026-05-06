@@ -208,6 +208,8 @@ func handleCreateContactNote(r *fastglue.Request) error {
 	if len(req.Note) == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.empty", "name", "note"), nil, envelope.InputError)
 	}
+	// Sanitize HTML to prevent stored XSS/HTML injection.
+	req.Note = stringutil.SanitizeHTML(req.Note)
 	n, err := app.user.CreateNote(contactID, auser.ID, req.Note)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
