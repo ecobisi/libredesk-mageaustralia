@@ -719,8 +719,13 @@ func (m *Manager) InsertMessage(message *models.Message) error {
 		m.mediaStore.Attach(media.ID, mmodels.ModelMessages, message.ID)
 	}
 
-	// Add this user as a participant if not already present.
-	m.addConversationParticipant(message.SenderID, message.ConversationUUID)
+	// Auto-add the sender as a conversation participant only when the sender
+	// is a contact. Agents follow conversations explicitly via the UX5
+	// follower controls — auto-following every agent who replies would flood
+	// busy agents with notifications for every conversation they touched.
+	if message.SenderType == models.SenderTypeContact {
+		m.AddConversationParticipant(message.SenderID, message.ConversationUUID)
+	}
 
 	// Skip updating last_message and broadcasting for continuity emails.
 	if !message.IsContinuityMessage() {

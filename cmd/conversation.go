@@ -1248,3 +1248,128 @@ func handleGetConversationByRef(r *fastglue.Request) error {
 
 	return r.SendEnvelope(conv)
 }
+
+// handleFollowConversation adds the current authenticated agent as a
+// participant (follower) of the conversation.
+//
+// UX5: agents follow conversations they're not assigned to so they receive
+// in-app notifications on activity. Self-follow is auth-only — any agent
+// with read access to the conversation can subscribe themselves.
+func handleFollowConversation(r *fastglue.Request) error {
+	var (
+		app   = r.Context.(*App)
+		uuid  = r.RequestCtx.UserValue("uuid").(string)
+		auser = r.RequestCtx.UserValue("user").(amodels.User)
+	)
+	user, err := app.user.GetAgent(auser.ID, "")
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	if _, err = enforceConversationAccess(app, uuid, user); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	if err := app.conversation.AddConversationParticipant(auser.ID, uuid); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(true)
+}
+
+// handleUnfollowConversation removes the current authenticated agent from
+// the conversation's participants. Always succeeds when the access check
+// passes — if the row doesn't exist the DELETE is a no-op.
+func handleUnfollowConversation(r *fastglue.Request) error {
+	var (
+		app   = r.Context.(*App)
+		uuid  = r.RequestCtx.UserValue("uuid").(string)
+		auser = r.RequestCtx.UserValue("user").(amodels.User)
+	)
+	user, err := app.user.GetAgent(auser.ID, "")
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	if _, err = enforceConversationAccess(app, uuid, user); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	if err := app.conversation.RemoveConversationParticipant(auser.ID, uuid); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(true)
+}
+
+// handleAddConversationFollower adds another agent as a follower of the
+// conversation. Used by the followers picker in the conversation sidebar
+// (admin / lead picks teammates to watch the ticket). Returns the updated
+// follower list so the caller can resync without an extra GET.
+func handleAddConversationFollower(r *fastglue.Request) error {
+	var (
+		app   = r.Context.(*App)
+		uuid  = r.RequestCtx.UserValue("uuid").(string)
+		auser = r.RequestCtx.UserValue("user").(amodels.User)
+	)
+	user, err := app.user.GetAgent(auser.ID, "")
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	if _, err = enforceConversationAccess(app, uuid, user); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+
+	var req struct {
+		UserID int `json:"user_id"`
+	}
+	if err := r.Decode(&req, "json"); err != nil || req.UserID <= 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("errors.parsingRequest"), nil, envelope.InputError)
+	}
+
+	if err := app.conversation.AddConversationParticipant(req.UserID, uuid); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+
+	// Fire the "you were added as a follower" notification asynchronously.
+	// Skip when an agent adds themselves — the self-follow flow shouldn't
+	// generate a redundant in-app/email alert. (The dedicated /follow
+	// endpoint above also routes here on the frontend, so the guard is the
+	// source of truth either way.)
+	if req.UserID != auser.ID {
+		go app.conversation.NotifyFollowerAdded(uuid, req.UserID, user)
+	}
+
+	p, err := app.conversation.GetConversationParticipants(uuid)
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(p)
+}
+
+// handleRemoveConversationFollower removes another agent from the
+// conversation's followers. Returns the updated follower list so the
+// caller can resync without an extra GET.
+func handleRemoveConversationFollower(r *fastglue.Request) error {
+	var (
+		app   = r.Context.(*App)
+		uuid  = r.RequestCtx.UserValue("uuid").(string)
+		auser = r.RequestCtx.UserValue("user").(amodels.User)
+	)
+	user, err := app.user.GetAgent(auser.ID, "")
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	if _, err = enforceConversationAccess(app, uuid, user); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+
+	userID, _ := strconv.Atoi(r.RequestCtx.UserValue("user_id").(string))
+	if userID <= 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("errors.parsingRequest"), nil, envelope.InputError)
+	}
+
+	if err := app.conversation.RemoveConversationParticipant(userID, uuid); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+
+	p, err := app.conversation.GetConversationParticipants(uuid)
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(p)
+}

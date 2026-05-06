@@ -348,6 +348,14 @@ const sendMessage = (uuid, data) =>
   })
 const getConversation = (uuid) => http.get(`/api/v1/conversations/${uuid}`)
 const getConversationParticipants = (uuid) => http.get(`/api/v1/conversations/${uuid}/participants`)
+// UX5: followers system. follow/unfollow are self-only; addConversationFollower/
+// removeConversationFollower target another agent. The latter pair return
+// the refreshed participant list so the caller can re-render without an
+// extra GET.
+const followConversation = (uuid) => http.post(`/api/v1/conversations/${uuid}/follow`)
+const unfollowConversation = (uuid) => http.delete(`/api/v1/conversations/${uuid}/follow`)
+const addConversationFollower = (uuid, userId) => http.post(`/api/v1/conversations/${uuid}/followers`, { user_id: Number(userId) })
+const removeConversationFollower = (uuid, userId) => http.delete(`/api/v1/conversations/${uuid}/followers/${userId}`)
 const getContactPageVisits = (uuid) => http.get(`/api/v1/conversations/${uuid}/page-visits`)
 const getAllMacros = () => http.get('/api/v1/macros')
 const getMacro = (id) => http.get(`/api/v1/macros/${id}`)
@@ -611,6 +619,10 @@ export default {
   getOverviewTagDistribution,
   getRecentActivities,
   getConversationParticipants,
+  followConversation,
+  unfollowConversation,
+  addConversationFollower,
+  removeConversationFollower,
   getConversationMessage,
   getConversationMessages,
   getCurrentUser,

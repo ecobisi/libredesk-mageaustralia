@@ -399,10 +399,15 @@ WHERE CASE
 END
 
 -- name: get-conversation-participants
-SELECT users.id as id, first_name, last_name, avatar_url 
+-- Only agents can be conversation followers (UX5 — followers are agents
+-- watching a ticket they're not assigned to). The contacts auto-added by
+-- InsertMessage stay in the table for the activity-log "added as
+-- participant" trail and for the email-recipients computation, but they
+-- do NOT show up in the followers picker or notifyParticipants fan-out.
+SELECT users.id as id, first_name, last_name, avatar_url
 FROM conversation_participants
 INNER JOIN users ON users.id = conversation_participants.user_id
-WHERE conversation_id =
+WHERE users.type = 'agent' AND conversation_id =
 (
     SELECT id FROM conversations WHERE uuid = $1
 );
@@ -411,6 +416,11 @@ WHERE conversation_id =
 INSERT INTO conversation_participants
 (user_id, conversation_id)
 VALUES($1, (SELECT id FROM conversations WHERE uuid = $2));
+
+-- name: delete-conversation-participant
+DELETE FROM conversation_participants
+WHERE user_id = $1
+  AND conversation_id = (SELECT id FROM conversations WHERE uuid = $2);
 
 -- name: get-unassigned-conversations
 SELECT

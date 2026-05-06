@@ -287,6 +287,7 @@ type queries struct {
 	UpdateConversationSubject          *sqlx.Stmt `query:"update-conversation-subject"`
 	UpdateConversationLastMessage      *sqlx.Stmt `query:"update-conversation-last-message"`
 	InsertConversationParticipant      *sqlx.Stmt `query:"insert-conversation-participant"`
+	DeleteConversationParticipant      *sqlx.Stmt `query:"delete-conversation-participant"`
 	InsertConversation                 *sqlx.Stmt `query:"insert-conversation"`
 	AddConversationTags                *sqlx.Stmt `query:"add-conversation-tags"`
 	SetConversationTags                *sqlx.Stmt `query:"set-conversation-tags"`
@@ -1680,8 +1681,11 @@ func (c *Manager) UpdateConversationCustomAttributes(uuid string, customAttribut
 	return nil
 }
 
-// addConversationParticipant adds a user as participant to a conversation.
-func (c *Manager) addConversationParticipant(userID int, conversationUUID string) error {
+// AddConversationParticipant adds a user as participant to a conversation.
+// Used both by InsertMessage (auto-add the contact author of an incoming
+// message) and the follower-management handlers (agent self-follow + admin
+// adding another agent as a watcher).
+func (c *Manager) AddConversationParticipant(userID int, conversationUUID string) error {
 	_, err := c.q.InsertConversationParticipant.Exec(userID, conversationUUID)
 	if err != nil {
 		if dbutil.IsUniqueViolationError(err) {
@@ -1712,6 +1716,95 @@ func (c *Manager) addConversationParticipant(userID int, conversationUUID string
 	}
 
 	return nil
+}
+
+// RemoveConversationParticipant removes a user from a conversation's
+// participants. Used by the follower-management handlers (agent unfollow +
+// admin removing another agent as a watcher). No-op when the row already
+// doesn't exist.
+func (c *Manager) RemoveConversationParticipant(userID int, conversationUUID string) error {
+	if _, err := c.q.DeleteConversationParticipant.Exec(userID, conversationUUID); err != nil {
+		c.lo.Error("error removing conversation participant", "user_id", userID, "conversation_uuid", conversationUUID, "error", err)
+		return envelope.NewError(envelope.GeneralError, c.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	return nil
+}
+
+// NotifyFollowerAdded sends an in-app + email notification to a user who was
+// just added as a follower (watcher) on a conversation by another agent.
+// Caller is expected to skip the dispatch when the agent is following
+// themselves (self-follow shouldn't generate a "you were added" alert).
+func (m *Manager) NotifyFollowerAdded(conversationUUID string, followerUserID int, addedBy umodels.User) {
+	if m.dispatcher == nil {
+		return
+	}
+
+	conv, err := m.GetConversation(0, conversationUUID, "")
+	if err != nil {
+		m.lo.Error("error fetching conversation for follower notification", "uuid", conversationUUID, "error", err)
+		return
+	}
+
+	follower, err := m.userStore.GetAgent(followerUserID, "")
+	if err != nil {
+		m.lo.Error("error fetching follower for notification", "user_id", followerUserID, "error", err)
+		return
+	}
+
+	addedByName := strings.TrimSpace(addedBy.FirstName + " " + addedBy.LastName)
+	if addedByName == "" {
+		addedByName = addedBy.Email.String
+	}
+
+	// Render personalised email if the recipient has an email + the template
+	// renders cleanly. Failure is non-fatal — the in-app + WS dispatch still
+	// fires so the agent at least sees the notification badge.
+	var email *notifier.EmailNotification
+	if follower.Email.String != "" {
+		content, subject, rerr := m.template.RenderStoredEmailTemplate(template.TmplFollowerAdded,
+			map[string]any{
+				"Conversation": map[string]any{
+					"ReferenceNumber": conv.ReferenceNumber,
+					"Subject":         conv.Subject.String,
+					"UUID":            conv.UUID,
+				},
+				"Recipient": map[string]any{
+					"FirstName": follower.FirstName,
+					"LastName":  follower.LastName,
+					"FullName":  follower.FullName(),
+					"Email":     follower.Email.String,
+				},
+				"Author": map[string]any{
+					"FirstName": addedBy.FirstName,
+					"LastName":  addedBy.LastName,
+					"FullName":  addedByName,
+					"Email":     addedBy.Email.String,
+				},
+			})
+		if rerr != nil {
+			m.lo.Warn("notify follower added: template render failed", "template", template.TmplFollowerAdded, "user_id", followerUserID, "error", rerr)
+		} else {
+			email = &notifier.EmailNotification{
+				Recipients: []string{follower.Email.String},
+				Subject:    subject,
+				Content:    content,
+			}
+		}
+	}
+
+	m.dispatcher.Send(notifier.Notification{
+		Type:             nmodels.NotificationTypeFollowerAdded,
+		RecipientIDs:     []int{followerUserID},
+		Title:            m.i18n.Ts("notification.addedAsFollower", "author", addedByName, "referenceNumber", conv.ReferenceNumber),
+		Body:             conv.Subject,
+		ConversationID:   null.IntFrom(conv.ID),
+		MessageID:        null.Int{},
+		ActorID:          null.IntFrom(addedBy.ID),
+		ConversationUUID: conv.UUID,
+		ActorFirstName:   addedBy.FirstName,
+		ActorLastName:    addedBy.LastName,
+		Email:            email,
+	})
 }
 
 // getConversationTags retrieves the tags associated with a conversation.

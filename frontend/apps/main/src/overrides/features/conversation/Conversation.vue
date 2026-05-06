@@ -124,6 +124,19 @@
               <GitMerge class="w-4 h-4 mr-2" />
               {{ t('conversation.merge.action') }}
             </DropdownMenuItem>
+            <!--
+              UX5: follow/unfollow self-toggle. Lets an agent subscribe to
+              activity on a conversation they're not assigned to without
+              going through the sidebar followers picker. The picker is
+              still where you add OTHER agents; this is the one-click path
+              for me-only.
+            -->
+            <DropdownMenuSeparator />
+            <DropdownMenuItem @click="toggleFollow">
+              <EyeOff v-if="isFollowing" class="w-4 h-4 mr-2" />
+              <Eye v-else class="w-4 h-4 mr-2" />
+              {{ isFollowing ? t('conversation.unfollow') : t('conversation.follow') }}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -290,7 +303,7 @@ import { CONVERSATION_DEFAULT_STATUSES } from '@/constants/conversation'
 import { useEmitter } from '@/composables/useEmitter'
 import { useToast } from '@/composables/useToast'
 import { Skeleton } from '@shared-ui/components/ui/skeleton'
-import { MoreHorizontal, Trash2, RotateCcw, ShieldAlert, ShieldCheck, Eye, GitMerge, ChevronDown, CheckCircle2, Pencil, Check } from 'lucide-vue-next'
+import { MoreHorizontal, Trash2, RotateCcw, ShieldAlert, ShieldCheck, Eye, EyeOff, GitMerge, ChevronDown, CheckCircle2, Pencil, Check } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
@@ -423,6 +436,52 @@ const otherViewers = computed(() => {
   return presenceStore.getViewers(uuid, userStore.userID)
 })
 
+// ---------------------------------------------------------------------------
+// UX5: follow/unfollow self-toggle.
+// ---------------------------------------------------------------------------
+// One-click path for the current agent to subscribe to or unsubscribe from
+// a conversation. Refreshed on every conversation switch by GETting the
+// participants list and checking for the current user's ID. The sidebar
+// followers picker is the source of truth for adding other agents; this
+// toggle just tracks the current agent's own membership.
+const isFollowing = ref(false)
+
+const refreshFollowState = async () => {
+  const uuid = conversationStore.current?.uuid
+  if (!uuid) {
+    isFollowing.value = false
+    return
+  }
+  try {
+    const res = await api.getConversationParticipants(uuid)
+    const participants = res.data?.data || []
+    isFollowing.value = participants.some((p) => p.id === userStore.userID)
+  } catch {
+    // Non-fatal — leave the flag in its previous state. Worst case the
+    // follow/unfollow click flips a wrong-direction state for one click.
+  }
+}
+
+const toggleFollow = async () => {
+  const uuid = conversationStore.current?.uuid
+  if (!uuid) return
+  // Optimistic flip so the menu item swaps icon/label immediately. If the
+  // server rejects (e.g. lost session), the catch reverts and surfaces the
+  // error.
+  const next = !isFollowing.value
+  isFollowing.value = next
+  try {
+    if (next) {
+      await api.followConversation(uuid)
+    } else {
+      await api.unfollowConversation(uuid)
+    }
+  } catch (error) {
+    isFollowing.value = !next
+    toast.error(error)
+  }
+}
+
 // Send presence when conversation changes
 watch(
   () => conversationStore.current?.uuid,
@@ -439,8 +498,10 @@ watch(
     }
     if (newUUID) {
       sendViewConversation(newUUID)
+      refreshFollowState()
     } else if (oldUUID) {
       sendViewConversation('')
+      isFollowing.value = false
     }
   },
   { immediate: true }

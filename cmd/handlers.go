@@ -62,6 +62,14 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.GET("/api/v1/views/{id}/conversations", perm(handleGetViewConversations, "conversations:read"))
 	g.GET("/api/v1/conversations/{uuid}", perm(handleGetConversation, "conversations:read"))
 	g.GET("/api/v1/conversations/{uuid}/participants", perm(handleGetConversationParticipants, "conversations:read"))
+	// UX5: followers system. Self-follow/unfollow uses auth-only (any agent
+	// with read access to the conversation can subscribe themselves), while
+	// add/remove of another agent is gated on conversations:read since
+	// adding a follower implies the caller can already see the thread.
+	g.POST("/api/v1/conversations/{uuid}/follow", auth(handleFollowConversation))
+	g.DELETE("/api/v1/conversations/{uuid}/follow", auth(handleUnfollowConversation))
+	g.POST("/api/v1/conversations/{uuid}/followers", perm(handleAddConversationFollower, "conversations:read"))
+	g.DELETE("/api/v1/conversations/{uuid}/followers/{user_id}", perm(handleRemoveConversationFollower, "conversations:read"))
 	g.PUT("/api/v1/conversations/{uuid}/assignee/user", perm(handleUpdateUserAssignee, "conversations:update_user_assignee"))
 	g.PUT("/api/v1/conversations/{uuid}/assignee/team", perm(handleUpdateTeamAssignee, "conversations:update_team_assignee"))
 	g.PUT("/api/v1/conversations/{uuid}/assignee/user/remove", perm(handleRemoveUserAssignee, "conversations:update_user_assignee"))
