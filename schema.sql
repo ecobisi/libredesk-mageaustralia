@@ -816,7 +816,7 @@ VALUES (
   'email_notification'::template_type,
   '
 
-<p>This is a notification that the SLA for conversation {{ .Conversation.ReferenceNumber }} is approaching the SLA deadline for {{ .SLA.Metric }}.</p>
+<p>This is a notification that the SLA for conversation <a href="{{ RootURL }}/inboxes/assigned/conversation/{{ .Conversation.UUID }}">#{{ .Conversation.ReferenceNumber }}</a> is approaching the SLA deadline for {{ .SLA.Metric }}.</p>
 
 <p>
   Details:<br>
@@ -847,7 +847,7 @@ INSERT INTO templates
 VALUES (
   'email_notification'::template_type,
   '
-<p>This is an urgent alert that the SLA for conversation {{ .Conversation.ReferenceNumber }} has been breached for {{ .SLA.Metric }}. Please take immediate action.</p>
+<p>This is an urgent alert that the SLA for conversation <a href="{{ RootURL }}/inboxes/assigned/conversation/{{ .Conversation.UUID }}">#{{ .Conversation.ReferenceNumber }}</a> has been breached for {{ .SLA.Metric }}. Please take immediate action.</p>
 
 <p>
   Details:<br>
@@ -878,7 +878,7 @@ INSERT INTO templates
 VALUES (
   'email_notification'::template_type,
   '
-<p>{{ .MentionedBy.FullName }} mentioned you in a private note on conversation #{{ .Conversation.ReferenceNumber }}.</p>
+<p>{{ .MentionedBy.FullName }} mentioned you in a private note on conversation <a href="{{ RootURL }}/inboxes/mentioned/conversation/{{ .Conversation.UUID }}">#{{ .Conversation.ReferenceNumber }}</a>.</p>
 
 <blockquote style="background-color: #f5f5f5; padding: 12px; margin: 16px 0; border-left: 4px solid #ddd;">
 {{ .Message.Content }}
