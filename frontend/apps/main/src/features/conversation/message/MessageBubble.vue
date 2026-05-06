@@ -1,7 +1,12 @@
 <template>
   <div class="flex flex-col text-left" :class="isOutgoing ? 'items-end' : 'items-start'">
-    <!-- Sender Name -->
-    <div class="mb-1 flex items-center gap-1" :class="isOutgoing ? 'pr-[47px]' : 'pl-[47px]'">
+    <!-- UX10: Sender name + timestamp on the same line. Tighter than a
+      separate timestamp row beneath the bubble, and means the relative
+      time is visible alongside the author when scanning the thread. -->
+    <div
+      class="mb-1 flex items-baseline gap-2"
+      :class="isOutgoing ? 'pr-[47px] justify-end' : 'pl-[47px]'"
+    >
       <router-link
         v-if="!isOutgoing"
         :to="{ name: 'contact-detail', params: { id: message.author?.id } }"
@@ -19,6 +24,16 @@
       <p v-else class="text-muted-foreground text-sm font-medium">
         {{ getFullName }}
       </p>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <span class="text-muted-foreground/60 text-xs">
+            {{ formatMessageTimestamp(message.created_at) }}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{{ formatFullTimestamp(message.created_at) }}</p>
+        </TooltipContent>
+      </Tooltip>
     </div>
 
     <!-- Message Bubble -->
@@ -233,19 +248,7 @@
       </button>
     </div>
 
-    <!-- Timestamp tooltip -->
-    <div :class="isOutgoing ? 'pr-[47px]' : 'pl-[47px]'">
-      <Tooltip>
-        <TooltipTrigger>
-          <span class="text-muted-foreground text-xs mt-1">
-            {{ formatMessageTimestamp(message.created_at) }}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{{ formatFullTimestamp(message.created_at) }}</p>
-        </TooltipContent>
-      </Tooltip>
-    </div>
+    <!-- UX10: timestamp moved up to the sender name row above. -->
   </div>
 </template>
 
