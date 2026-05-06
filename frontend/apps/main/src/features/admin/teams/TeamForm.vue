@@ -1,11 +1,21 @@
 <template>
   <form @submit="onSubmit" class="space-y-6">
     <div class="grid gap-6 md:grid-cols-2">
-    <FormField name="emoji" v-slot="{ componentField }">
+    <FormField name="emoji" v-slot="{ componentField, value }">
       <FormItem ref="emojiPickerContainer" class="relative">
         <FormLabel>{{ $t('admin.team.emoji') }}</FormLabel>
         <FormControl>
-          <Input type="text" v-bind="componentField" readonly @click="toggleEmojiPicker" />
+          <div class="flex items-center gap-3">
+            <Input type="text" v-bind="componentField" readonly @click="toggleEmojiPicker" class="flex-1" />
+            <button
+              v-if="value"
+              type="button"
+              @click="form.setFieldValue('emoji', '')"
+              class="text-xs text-muted-foreground hover:underline shrink-0"
+            >
+              {{ $t('admin.team.emoji.clear') }}
+            </button>
+          </div>
           <div v-if="isEmojiPickerVisible" class="absolute z-10 mt-2">
             <EmojiPicker :native="true" @select="onSelectEmoji" class="w-[300px]" />
           </div>
