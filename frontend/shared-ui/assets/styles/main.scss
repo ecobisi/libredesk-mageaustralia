@@ -170,6 +170,11 @@
     --radius: 0.5rem;
     --private: 35 90% 94%;
     --canvas: 240 5% 90%;
+    /* UX6: subtle bubble fills so agent vs customer messages are visually
+       distinguishable beyond just left/right alignment. Agent (outgoing) is
+       a near-white grey; customer (incoming) keeps the page background. */
+    --bubble-agent: 220 16% 97%;
+    --bubble-customer: 0 0% 100%;
   }
 
   .dark {
@@ -202,6 +207,10 @@
     --ring: 240 4.9% 83.9%;
     --private: 30 35% 18%;
     --canvas: 240 7% 15%;
+    /* UX6: dark-mode bubble fills. Agent slightly lighter than card so it
+       lifts off the page; customer matches card surface. */
+    --bubble-agent: 240 5% 17%;
+    --bubble-customer: 240 5% 13%;
   }
 }
 

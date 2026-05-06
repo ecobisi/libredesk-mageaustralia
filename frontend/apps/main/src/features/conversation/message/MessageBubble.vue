@@ -332,10 +332,16 @@ const isForwardRelated = computed(
 )
 
 // Bubble classes - conditional based on direction
+// UX6: agent (outgoing non-private) and customer (incoming) get distinct
+// subtle background fills so the conversation reads as a back-and-forth
+// rather than a wall of identically-styled bubbles. Tokens (--bubble-agent /
+// --bubble-customer) live in shared-ui/main.scss so dark-mode is handled.
 const bubbleClasses = computed(() => ({
   // Outgoing-specific: private message styling
   'bg-private': (isOutgoing.value && props.message.private) || isForwardRelated.value,
   'border border-border': isOutgoing.value && !props.message.private && !isForwardRelated.value,
+  'bg-bubble-agent': isOutgoing.value && !props.message.private && !isForwardRelated.value,
+  'bg-bubble-customer': !isOutgoing.value,
   'opacity-50 animate-pulse': isOutgoing.value && props.message.status === 'pending',
   'border-destructive': isOutgoing.value && props.message.status === 'failed',
   relative: isOutgoing.value,

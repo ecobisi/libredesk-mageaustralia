@@ -20,7 +20,11 @@ var (
 )
 
 const (
-	maxStatusNameLength = 25
+	// UX6: 25 is too tight for descriptive admin-defined statuses (e.g.
+	// "Waiting on supplier reply", "Pending customer response"). 50 fits
+	// real-world bulk-imported names (e.g. Freshdesk canned status labels)
+	// while still being short enough for the inline pill in the table view.
+	maxStatusNameLength = 50
 )
 
 // Manager handles changes to statuses.

@@ -141,10 +141,14 @@
               <ChevronDown class="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" class="w-56">
+          <!-- UX6: width auto with min-w so long custom status names (now up
+               to 50 chars) and translated "Send and set as ..." labels don't
+               truncate. Smaller font + tighter padding keep the menu compact. -->
+          <DropdownMenuContent align="end" class="w-auto min-w-[14rem] max-w-[24rem]">
             <DropdownMenuItem
               v-for="status in sendStatuses"
               :key="status"
+              class="text-xs whitespace-nowrap py-1.5"
               @click="$emit('sendWithStatus', status)"
             >
               {{ $t('replyBox.sendAndSetAs', { status }) }}

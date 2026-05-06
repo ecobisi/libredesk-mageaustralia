@@ -11,13 +11,13 @@ export const createFormSchema = (t) => z.object({
     .min(1, {
       message: t('validation.minmax', {
         min: 1,
-        max: 25,
+        max: 50,
       })
     })
-    .max(25, {
+    .max(50, {
       message: t('validation.minmax', {
         min: 1,
-        max: 25,
+        max: 50,
       })
     }),
   category: z.enum(['open', 'waiting', 'resolved'], {
