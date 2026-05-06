@@ -1,7 +1,7 @@
 FROM alpine:3.18
 
 # Install necessary packages
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata libheif-tools
 
 # Set the working directory to /libredesk
 WORKDIR /libredesk

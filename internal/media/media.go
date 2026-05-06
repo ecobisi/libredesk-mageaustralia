@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -104,6 +106,22 @@ func (m *Manager) UploadAndInsert(srcFilename, contentType, contentID string, mo
 		uuid = uuid.New()
 		err  error
 	)
+
+	// Convert HEIC/HEIF images to JPEG for browser compatibility.
+	if isHEIC(contentType, srcFilename) {
+		converted, newName, newType, convErr := m.convertHEIC(srcFilename, content)
+		if convErr == nil {
+			content = converted
+			srcFilename = newName
+			contentType = newType
+			// Update file size from converted content.
+			if rs, ok := content.(*bytes.Reader); ok {
+				fileSize = int(rs.Size())
+			}
+		} else {
+			m.lo.Warn("HEIC conversion failed, storing original", "error", convErr)
+		}
+	}
 
 	// Override content type after upload (in case it was detected incorrectly).
 	_, contentType, err = m.Upload(uuid.String(), contentType, content)
@@ -410,6 +428,61 @@ func (m *Manager) DuplicateForModel(srcModelType string, srcModelID int) ([]mode
 		result = append(result, newMedia)
 	}
 	return result, nil
+}
+
+// isHEIC checks if the content type or filename indicates a HEIC/HEIF image.
+func isHEIC(contentType, filename string) bool {
+	ct := strings.ToLower(contentType)
+	if ct == "image/heic" || ct == "image/heif" || ct == "image/heic-sequence" || ct == "image/heif-sequence" {
+		return true
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	return ext == ".heic" || ext == ".heif"
+}
+
+// convertHEIC converts HEIC/HEIF image data to JPEG using heif-convert.
+// Returns the converted content, new filename, and new content type.
+// If conversion fails, returns the original data unchanged.
+func (m *Manager) convertHEIC(srcFilename string, content io.ReadSeeker) (io.ReadSeeker, string, string, error) {
+	// Write HEIC to temp file.
+	tmpIn, err := os.CreateTemp("", "heic-in-*.heic")
+	if err != nil {
+		return content, srcFilename, "image/heic", err
+	}
+	defer os.Remove(tmpIn.Name())
+
+	content.Seek(0, io.SeekStart)
+	if _, err := io.Copy(tmpIn, content); err != nil {
+		tmpIn.Close()
+		return content, srcFilename, "image/heic", err
+	}
+	tmpIn.Close()
+
+	// Output path.
+	tmpOut := tmpIn.Name() + ".jpg"
+	defer os.Remove(tmpOut)
+
+	// Convert using heif-convert.
+	cmd := exec.Command("heif-convert", "-q", "90", tmpIn.Name(), tmpOut)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		m.lo.Error("heif-convert failed", "error", err, "output", string(output))
+		content.Seek(0, io.SeekStart)
+		return content, srcFilename, "image/heic", err
+	}
+
+	// Read converted file.
+	jpegData, err := os.ReadFile(tmpOut)
+	if err != nil {
+		content.Seek(0, io.SeekStart)
+		return content, srcFilename, "image/heic", err
+	}
+
+	// Update filename extension.
+	newFilename := strings.TrimSuffix(strings.TrimSuffix(srcFilename, ".heic"), ".HEIC")
+	newFilename = strings.TrimSuffix(strings.TrimSuffix(newFilename, ".heif"), ".HEIF") + ".jpg"
+
+	m.lo.Debug("converted HEIC to JPEG", "original", srcFilename, "new", newFilename, "size", len(jpegData))
+	return bytes.NewReader(jpegData), newFilename, "image/jpeg", nil
 }
 
 // detectContentType detects the content type of a file.
