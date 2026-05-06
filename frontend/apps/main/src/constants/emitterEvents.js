@@ -12,5 +12,10 @@ export const EMITTER_EVENTS = {
     // payload + restoreData; Conversation.vue holds the 5s timer and emits
     // RESTORE_SEND back into ReplyBox if the agent clicks Undo.
     SEND_QUEUED: 'send-queued',
-    RESTORE_SEND: 'restore-send'
+    RESTORE_SEND: 'restore-send',
+    // UX10: global keyboard shortcuts. App.vue listens for R / N keys and
+    // emits these; the active conversation's ReplyBox switches messageType
+    // and focuses the editor.
+    SHORTCUT_REPLY: 'shortcut-reply',
+    SHORTCUT_NOTE: 'shortcut-note'
 }

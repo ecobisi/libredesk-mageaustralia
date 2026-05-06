@@ -127,10 +127,13 @@
 
   <!-- Create conversation dialog -->
   <CreateConversation v-model="openCreateConversationDialog" v-if="openCreateConversationDialog" />
+
+  <!-- Keyboard shortcuts help dialog -->
+  <KeyboardShortcutsDialog v-model:open="showShortcutsDialog" />
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useStorage } from '@vueuse/core'
 import { RouterView } from 'vue-router'
 import { useUserStore } from './stores/user'
@@ -161,7 +164,8 @@ import CreateConversation from '@/features/conversation/CreateConversation.vue'
 import { Inbox, Shield, FileLineChart, BookUser } from 'lucide-vue-next'
 import SmallScreenOverlay from '@/components/SmallScreenOverlay.vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import KeyboardShortcutsDialog from '@main/components/KeyboardShortcutsDialog.vue'
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
@@ -181,6 +185,7 @@ import { useTheme } from '@main/composables/useTheme'
 import api from '@main/api'
 
 const route = useRoute()
+const router = useRouter()
 const emitter = useEmitter()
 
 // Apply the persisted theme to <html data-theme="..."> on app start. Called
@@ -219,6 +224,7 @@ const userViews = ref([])
 const view = ref({})
 const openCreateViewForm = ref(false)
 const openCreateConversationDialog = ref(false)
+const showShortcutsDialog = ref(false)
 const { t } = useI18n()
 const notificationStore = useNotificationStore()
 
@@ -231,6 +237,58 @@ watch([() => notificationStore.unreadCount, () => route.fullPath], ([count]) => 
 
 initWS()
 useIdleDetection()
+
+// UX10: Global single-key shortcuts. Only fire when no input/editor/textarea is
+// focused, no Radix dialog is open, and no modifier (Ctrl/Cmd/Alt) is held —
+// these would conflict with editor commands and form input. Dialogs handle
+// their own Escape via Radix; we don't intercept Esc here.
+const isInputFocused = () => {
+  const el = document.activeElement
+  if (!el) return false
+  const tag = el.tagName.toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
+  if (el.getAttribute('contenteditable') === 'true') return true
+  if (el.closest('.tiptap') || el.closest('.ProseMirror')) return true
+  return false
+}
+
+const handleGlobalKeydown = (event) => {
+  // Skip if any modifier is held (cmd/ctrl/alt) — those belong to specific
+  // shortcuts handled elsewhere (Cmd+K command box, Cmd+B sidebar, editor
+  // formatting). Shift alone is allowed because '?' arrives as Shift+/.
+  if (event.ctrlKey || event.metaKey || event.altKey) return
+  if (isInputFocused()) return
+  // Don't fire while a Radix dialog/popover is open.
+  if (document.querySelector('[role="dialog"]')) return
+
+  switch (event.key) {
+    case '?':
+      event.preventDefault()
+      showShortcutsDialog.value = true
+      break
+    case 'r':
+      event.preventDefault()
+      emitter.emit(EMITTER_EVENTS.SHORTCUT_REPLY)
+      break
+    case 'n':
+      event.preventDefault()
+      emitter.emit(EMITTER_EVENTS.SHORTCUT_NOTE)
+      break
+    case '/':
+      event.preventDefault()
+      // Mirror Sidebar.vue's goToSearch: clear cached state, push the search
+      // route (timestamped query when already on it so the route watcher fires).
+      sessionStorage.removeItem('searchQuery')
+      sessionStorage.removeItem('searchResults')
+      sessionStorage.removeItem('searchTotal')
+      if (route.name === 'search') {
+        router.push({ name: 'search', query: { t: Date.now() } })
+      } else {
+        router.push({ name: 'search' })
+      }
+      break
+  }
+}
 
 // Unlock audio on first user interaction (browser autoplay policy)
 const unlockAudio = () => {
@@ -245,6 +303,11 @@ onMounted(() => {
   initToaster()
   listenViewRefresh()
   initStores()
+  document.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleGlobalKeydown)
 })
 
 // Initialize data stores

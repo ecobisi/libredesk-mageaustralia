@@ -916,6 +916,8 @@ onMounted(() => {
   emitter.on(EMITTER_EVENTS.FORWARD_MESSAGE, handleForwardMessage)
   emitter.on(EMITTER_EVENTS.NEW_MESSAGE, handleNewMessageCollision)
   emitter.on(EMITTER_EVENTS.RESTORE_SEND, handleRestoreSend)
+  emitter.on(EMITTER_EVENTS.SHORTCUT_REPLY, handleShortcutReply)
+  emitter.on(EMITTER_EVENTS.SHORTCUT_NOTE, handleShortcutNote)
   // EC14: ensure inboxes are loaded so fromOptions can be computed for
   // the From switcher. fetchInboxes is a no-op if already populated.
   inboxStore.fetchInboxes()
@@ -928,7 +930,26 @@ onBeforeUnmount(() => {
   emitter.off(EMITTER_EVENTS.FORWARD_MESSAGE, handleForwardMessage)
   emitter.off(EMITTER_EVENTS.NEW_MESSAGE, handleNewMessageCollision)
   emitter.off(EMITTER_EVENTS.RESTORE_SEND, handleRestoreSend)
+  emitter.off(EMITTER_EVENTS.SHORTCUT_REPLY, handleShortcutReply)
+  emitter.off(EMITTER_EVENTS.SHORTCUT_NOTE, handleShortcutNote)
 })
+
+// UX10: global R / N shortcuts. App.vue's keydown handler emits these
+// (only when no input/editor is focused); we flip the messageType tab and
+// focus the editor so the agent can start typing immediately.
+function handleShortcutReply() {
+  if (!conversationStore.current?.uuid) return
+  messageType.value = 'reply'
+  // nextTick not needed — the Tab change is reactive but the focus call
+  // doesn't depend on the editor being remounted (ReplyBoxContent is always
+  // present, only the toolbar/recipient fields change with messageType).
+  setTimeout(() => replyBoxContentRef.value?.focus(), 0)
+}
+function handleShortcutNote() {
+  if (!conversationStore.current?.uuid) return
+  messageType.value = 'private_note'
+  setTimeout(() => replyBoxContentRef.value?.focus(), 0)
+}
 
 /**
  * EC3: Restore the editor state after the agent clicks Undo on the queued
