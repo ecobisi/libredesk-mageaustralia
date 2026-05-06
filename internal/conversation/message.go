@@ -977,6 +977,12 @@ func (m *Manager) ProcessIncomingMessage(in models.IncomingMessage) (models.Mess
 		}
 	}
 
+	// Tidy up messy email-client HTML (Outlook empty divs, runs of <br>, etc.)
+	// before storing. Not a security sanitiser; purely a display-quality pass.
+	if msg.ContentType == models.ContentTypeHTML {
+		msg.Content = stringutil.SanitizeEmailHTML(msg.Content)
+	}
+
 	// Insert message.
 	if err = m.InsertMessage(&msg); err != nil {
 		return models.Message{}, err
