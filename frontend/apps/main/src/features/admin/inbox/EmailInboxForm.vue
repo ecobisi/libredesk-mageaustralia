@@ -344,7 +344,7 @@
         <FormItem>
           <FormLabel>{{ $t('admin.inbox.mailbox') }}</FormLabel>
           <FormControl>
-            <Input type="text" placeholder="INBOX" v-bind="componentField" />
+            <Input type="text" placeholder="INBOX, [Gmail]/Spam" v-bind="componentField" />
           </FormControl>
           <FormDescription>
             {{ $t('admin.inbox.mailbox.description') }}
@@ -503,7 +503,7 @@
         <FormItem>
           <FormLabel>{{ $t('admin.inbox.mailbox') }}</FormLabel>
           <FormControl>
-            <Input type="text" placeholder="INBOX" v-bind="componentField" />
+            <Input type="text" placeholder="INBOX, [Gmail]/Spam" v-bind="componentField" />
           </FormControl>
           <FormDescription>
             {{ $t('admin.inbox.mailbox.description') }}

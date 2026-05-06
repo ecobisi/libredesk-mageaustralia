@@ -246,7 +246,7 @@
   "admin.inbox.livechat.websiteUrl": "Website URL",
   "admin.inbox.livechat.websiteUrl.description": "URL where the chat widget is installed. Used in continuity emails to link back to chat.",
   "admin.inbox.mailbox": "Mailbox",
-  "admin.inbox.mailbox.description": "Mailbox (folder) to scan for incoming emails. Default is INBOX (usually no need to change).",
+  "admin.inbox.mailbox.description": "Mailbox folder(s) to scan for incoming emails. Use a comma-separated list to poll multiple folders (e.g. \"INBOX, [Gmail]/Spam\"). Default is INBOX.",
   "admin.inbox.maxConnections": "Max Connections",
   "admin.inbox.maxConnections.description": "Maximum number of concurrent connections to the server.",
   "admin.inbox.maxRetries": "Max Retries",

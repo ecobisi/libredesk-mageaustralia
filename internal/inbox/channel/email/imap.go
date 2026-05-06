@@ -64,10 +64,23 @@ func (e *Email) ReadIncomingMessages(ctx context.Context, cfg imodels.IMAPConfig
 				return nil
 			}
 
-			if err := e.processMailbox(ctx, scanInboxSince, cfg); err != nil && err != context.Canceled {
-				e.lo.Error("error searching emails", "error", err)
+			// cfg.Mailbox may list multiple folders separated by commas
+			// (e.g. "INBOX, [Gmail]/Spam"). Poll each in turn so a single
+			// inbox can pick up mail from more than one IMAP folder. Errors
+			// on one folder must not abort the others.
+			mailboxes := strings.Split(cfg.Mailbox, ",")
+			for _, mb := range mailboxes {
+				mb = strings.TrimSpace(mb)
+				if mb == "" {
+					continue
+				}
+				mbCfg := cfg
+				mbCfg.Mailbox = mb
+				if err := e.processMailbox(ctx, scanInboxSince, mbCfg); err != nil && err != context.Canceled {
+					e.lo.Error("error searching emails", "error", err, "mailbox", mb)
+				}
+				e.lo.Info("email search complete", "mailbox", mb, "inbox_id", e.Identifier())
 			}
-			e.lo.Info("email search complete", "mailbox", cfg.Mailbox, "inbox_id", e.Identifier())
 		}
 	}
 }
