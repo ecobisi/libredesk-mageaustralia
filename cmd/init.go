@@ -794,7 +794,8 @@ func initAuth(o *oidc.Manager, rd *redis.Client, i18n *i18n.I18n) *auth_.Auth {
 
 	secure := !ko.Bool("app.server.disable_secure_cookies")
 	sessionLifetime := ko.Duration("app.server.session_lifetime")
-	auth, err := auth_.New(auth_.Config{Providers: providers, SecureCookies: secure, SessionLifetime: sessionLifetime}, i18n, rd, lo)
+	allowedHosts := ko.Strings("oidc.allowed_hosts")
+	auth, err := auth_.New(auth_.Config{Providers: providers, SecureCookies: secure, SessionLifetime: sessionLifetime, AllowedHosts: allowedHosts}, i18n, rd, lo)
 	if err != nil {
 		log.Fatalf("error initializing auth: %v", err)
 	}
@@ -809,7 +810,10 @@ func reloadAuth(app *App) error {
 	if err != nil {
 		log.Fatalf("error reloading auth: %v", err)
 	}
-	if err := app.auth.Reload(auth_.Config{Providers: providers}); err != nil {
+	if err := app.auth.Reload(auth_.Config{
+		Providers:    providers,
+		AllowedHosts: ko.Strings("oidc.allowed_hosts"),
+	}); err != nil {
 		app.lo.Error("error reloading auth", "error", err)
 		return err
 	}

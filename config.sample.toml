@@ -130,6 +130,13 @@ timeout = "15s"
 # CIDR ranges allowed to bypass SSRF protection (e.g. ["10.0.0.0/8"])
 allowed_hosts = []
 
+[oidc]
+# CIDR ranges allowed to bypass SSRF protection on OIDC discovery and token
+# exchange. Set this if your IdP runs on a private subnet (e.g. ["10.0.0.0/8"]).
+# Empty by default. All loopback / RFC1918 / link-local / IPv6 reserved ranges
+# are blocked unless listed here.
+allowed_hosts = []
+
 [conversation]
 # How often to check for conversations to unsnooze
 unsnooze_interval = "5m"

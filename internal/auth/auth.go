@@ -6,7 +6,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/abhinavxd/libredesk/internal/envelope"
 	"github.com/abhinavxd/libredesk/internal/stringutil"
 	"github.com/abhinavxd/libredesk/internal/user/models"
+	"github.com/abhinavxd/ssrfguard"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/knadh/go-i18n"
 	"github.com/redis/go-redis/v9"
@@ -50,6 +53,10 @@ type Config struct {
 	Providers       []Provider
 	SecureCookies   bool
 	SessionLifetime time.Duration
+	// AllowedHosts are CIDR prefixes permitted to bypass SSRF protection
+	// for OIDC discovery / token exchange (e.g. self-hosted IdP on a
+	// private subnet). Empty by default — all private/reserved ranges blocked.
+	AllowedHosts []string
 }
 
 // defaultSessionLifetime is used when Config.SessionLifetime is unset or non-positive.
@@ -57,14 +64,45 @@ const defaultSessionLifetime = 9 * time.Hour
 
 // Auth is the auth service it manages OIDC authentication and sessions
 type Auth struct {
-	mu        sync.RWMutex
-	cfg       Config
-	i18n      *i18n.I18n
-	oauthCfgs map[int]oauth2.Config
-	verifiers map[int]*oidc.IDTokenVerifier
-	sess      *simplesessions.Manager
-	logger    *logf.Logger
-	rd        *redis.Client
+	mu         sync.RWMutex
+	cfg        Config
+	i18n       *i18n.I18n
+	oauthCfgs  map[int]oauth2.Config
+	verifiers  map[int]*oidc.IDTokenVerifier
+	sess       *simplesessions.Manager
+	logger     *logf.Logger
+	rd         *redis.Client
+	httpClient *http.Client
+}
+
+// newSSRFGuardedClient builds an *http.Client whose dialer rejects connections
+// to private/reserved IP ranges. The check fires after DNS resolution but
+// before the TCP handshake, so it also defends against DNS-rebinding attacks.
+// allowedCIDRs lists prefixes permitted to bypass the deny list (e.g. for
+// self-hosted IdPs on internal networks).
+func newSSRFGuardedClient(allowedCIDRs []string, logger *logf.Logger) *http.Client {
+	var prefixes []netip.Prefix
+	for _, h := range allowedCIDRs {
+		prefix, err := netip.ParsePrefix(h)
+		if err != nil {
+			logger.Warn("ignoring invalid auth `allowed_hosts` entry", "entry", h, "error", err)
+			continue
+		}
+		prefixes = append(prefixes, prefix)
+	}
+	guard := ssrfguard.New(prefixes...)
+	return &http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   5 * time.Second,
+				KeepAlive: 30 * time.Second,
+				Control:   guard.Control,
+			}).DialContext,
+			TLSHandshakeTimeout:   5 * time.Second,
+			ResponseHeaderTimeout: 10 * time.Second,
+		},
+	}
 }
 
 // New creates an Auth service with configured OIDC providers
@@ -72,8 +110,11 @@ func New(cfg Config, i18n *i18n.I18n, rd *redis.Client, logger *logf.Logger) (*A
 	oauthCfgs := make(map[int]oauth2.Config)
 	verifiers := make(map[int]*oidc.IDTokenVerifier)
 
+	httpClient := newSSRFGuardedClient(cfg.AllowedHosts, logger)
+	discoveryCtx := oidc.ClientContext(context.Background(), httpClient)
+
 	for _, provider := range cfg.Providers {
-		oidcProv, err := oidc.NewProvider(context.Background(), provider.ProviderURL)
+		oidcProv, err := oidc.NewProvider(discoveryCtx, provider.ProviderURL)
 		if err != nil {
 			logger.Error("error initializing oidc provider", "error", err, "provider", provider.Provider)
 			continue
@@ -116,19 +157,24 @@ func New(cfg Config, i18n *i18n.I18n, rd *redis.Client, logger *logf.Logger) (*A
 	sess.SetCookieHooks(simpleSessGetCookieCB, simpleSessSetCookieCB)
 
 	return &Auth{
-		cfg:       cfg,
-		i18n:      i18n,
-		oauthCfgs: oauthCfgs,
-		verifiers: verifiers,
-		sess:      sess,
-		logger:    logger,
-		rd:        rd,
+		cfg:        cfg,
+		i18n:       i18n,
+		oauthCfgs:  oauthCfgs,
+		verifiers:  verifiers,
+		sess:       sess,
+		logger:     logger,
+		rd:         rd,
+		httpClient: httpClient,
 	}, nil
 }
 
 // TestProvider tests the OIDC provider url by doing a discovery on it.
 func (a *Auth) TestProvider(url string) error {
-	_, err := oidc.NewProvider(context.Background(), url)
+	a.mu.RLock()
+	client := a.httpClient
+	a.mu.RUnlock()
+	ctx := oidc.ClientContext(context.Background(), client)
+	_, err := oidc.NewProvider(ctx, url)
 	if err != nil {
 		a.logger.Error("error testing oidc provider", "provider_url", url, "error", err)
 		return envelope.NewError(envelope.GeneralError, err.Error(), nil)
@@ -144,8 +190,15 @@ func (a *Auth) Reload(cfg Config) error {
 	oauthCfgs := make(map[int]oauth2.Config)
 	verifiers := make(map[int]*oidc.IDTokenVerifier)
 
+	// Reuse the existing SSRF-guarded client unless the allow list changed.
+	httpClient := a.httpClient
+	if !equalStrings(cfg.AllowedHosts, a.cfg.AllowedHosts) || httpClient == nil {
+		httpClient = newSSRFGuardedClient(cfg.AllowedHosts, a.logger)
+	}
+	discoveryCtx := oidc.ClientContext(context.Background(), httpClient)
+
 	for _, provider := range cfg.Providers {
-		oidcProv, err := oidc.NewProvider(context.Background(), provider.ProviderURL)
+		oidcProv, err := oidc.NewProvider(discoveryCtx, provider.ProviderURL)
 		if err != nil {
 			a.logger.Error("error initializing oidc provider", "provider", provider.Provider, "provider_url", provider.ProviderURL, "error", err)
 			return envelope.NewError(envelope.GeneralError, err.Error(), nil)
@@ -168,8 +221,22 @@ func (a *Auth) Reload(cfg Config) error {
 	a.cfg = cfg
 	a.oauthCfgs = oauthCfgs
 	a.verifiers = verifiers
+	a.httpClient = httpClient
 
 	return nil
+}
+
+// equalStrings reports whether two string slices are element-wise equal.
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // LoginURL returns the login URL for the given provider.
@@ -198,6 +265,13 @@ func (a *Auth) ExchangeOIDCToken(ctx context.Context, providerID int, code strin
 		return "", OIDCclaim{}, fmt.Errorf("invalid provider ID: %d", providerID)
 	}
 
+	// Route the token exchange through the SSRF-guarded client too. The token
+	// endpoint URL was sourced from the IdP's discovery doc; even though
+	// discovery is already blocked from private IPs, an IdP could in principle
+	// publish a token endpoint pointing at one. Belt-and-braces.
+	if a.httpClient != nil {
+		ctx = context.WithValue(ctx, oauth2.HTTPClient, a.httpClient)
+	}
 	tk, err := oauthCfg.Exchange(ctx, code)
 	if err != nil {
 		return "", OIDCclaim{}, fmt.Errorf("error exchanging token: %v", err)
