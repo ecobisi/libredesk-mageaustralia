@@ -50,6 +50,7 @@ const (
 	ConversationInbox                = "inbox"
 	ContactEmail                     = "contact_email"
 	InboxEmail                       = "inbox_email"
+	MessageToEmail                   = "message_to_email"
 
 	EventConversationUserAssigned    = "conversation.user.assigned"
 	EventConversationTeamAssigned    = "conversation.team.assigned"

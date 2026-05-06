@@ -186,6 +186,11 @@ type Conversation struct {
 	Subject                   null.String            `db:"subject" json:"subject"`
 	InboxMail                 string                 `db:"inbox_mail" json:"inbox_mail"`
 	InboxReplyTo              string                 `db:"inbox_reply_to" json:"inbox_reply_to"`
+	// UX10: comma-joined `To:` header(s) from the first incoming message.
+	// Used by the automation `message_to_email` field so rules can route on
+	// the address the customer wrote to (e.g. "support@" vs "orders@" when
+	// both alias into the same inbox).
+	MessageToEmail            string                 `db:"message_to_email" json:"message_to_email"`
 	InboxName                 string                 `db:"inbox_name" json:"inbox_name"`
 	InboxChannel              string                 `db:"inbox_channel" json:"inbox_channel"`
 	Tags                      null.JSON              `db:"tags" json:"tags"`

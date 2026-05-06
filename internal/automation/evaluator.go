@@ -126,6 +126,12 @@ func (e *Engine) evaluateRule(rule models.RuleDetail, conversation cmodels.Conve
 			valueToCompare = conversation.Contact.Email.String
 		case models.InboxEmail:
 			valueToCompare = conversation.InboxMail
+		case models.MessageToEmail:
+			// UX10: matches against the actual `To:` header(s) on the first
+			// incoming message rather than the inbox's configured `from`
+			// address. Lets automations route on the address the customer
+			// addressed (e.g. "support@" vs "orders@" sharing one inbox).
+			valueToCompare = conversation.MessageToEmail
 		case models.ConversationSubject:
 			valueToCompare = conversation.Subject.String
 		case models.ConversationContent:

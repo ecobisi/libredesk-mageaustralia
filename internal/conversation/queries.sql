@@ -139,6 +139,10 @@ SELECT
    COALESCE(inb.from, '') as inbox_mail,
    COALESCE(inb.config->>'reply_to', '') as inbox_reply_to,
    COALESCE(inb.channel::TEXT, '') as inbox_channel,
+   -- UX10: comma-joined `To:` header(s) from the first incoming message.
+   -- Powers the `message_to_email` automation field. NULL when the
+   -- conversation was outgoing-first or the meta->'to' shape isn't an array.
+   COALESCE((SELECT string_agg(elem, ',') FROM jsonb_array_elements_text((SELECT meta->'to' FROM conversation_messages WHERE conversation_id = c.id AND type = 'incoming' ORDER BY id LIMIT 1)) elem), '') as message_to_email,
    c.status_id,
    c.priority_id,
    p.name as priority,

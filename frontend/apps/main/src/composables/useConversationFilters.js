@@ -114,7 +114,16 @@ export function useConversationFilters () {
             operators: FIELD_OPERATORS.TEXT
         },
         inbox_email: {
-            label: t('automation.field.toEmail'),
+            label: t('automation.field.inboxEmail'),
+            type: FIELD_TYPE.TEXT,
+            operators: FIELD_OPERATORS.TEXT
+        },
+        // UX10: distinct from inbox_email (which is the inbox's `from`).
+        // message_to_email matches the actual To: header on the first
+        // incoming message, so a single inbox can route on whether a
+        // customer wrote to "support@" vs "orders@".
+        message_to_email: {
+            label: t('automation.field.toEmailActual'),
             type: FIELD_TYPE.TEXT,
             operators: FIELD_OPERATORS.TEXT
         },
