@@ -1045,6 +1045,8 @@
   "placeholders.tellUsAboutYourself": "Tell us about yourself",
   "replyBox.addBccRecipients": "Add BCC recipients",
   "replyBox.addCcRecipients": "Add CC recipients",
+  "replyBox.addNote": "Add note",
+  "replyBox.addNoteAndSetAs": "Add note and set as {status}",
   "replyBox.applyMacro": "Apply macro",
   "replyBox.bcc": "BCC",
   "replyBox.cc": "CC",

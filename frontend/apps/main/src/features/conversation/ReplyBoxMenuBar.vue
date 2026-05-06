@@ -128,7 +128,7 @@
           :disabled="!enableSend"
           :isLoading="isSending"
         >
-          {{ $t('globals.messages.send') }}
+          {{ messageType === 'private_note' ? $t('replyBox.addNote') : $t('globals.messages.send') }}
         </Button>
         <DropdownMenu v-if="sendStatuses.length > 0">
           <DropdownMenuTrigger as-child>
@@ -151,7 +151,9 @@
               class="text-xs whitespace-nowrap py-1.5"
               @click="$emit('sendWithStatus', status)"
             >
-              {{ $t('replyBox.sendAndSetAs', { status }) }}
+              {{ messageType === 'private_note'
+                ? $t('replyBox.addNoteAndSetAs', { status })
+                : $t('replyBox.sendAndSetAs', { status }) }}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -222,6 +224,14 @@ const props = defineProps({
   },
   handleFileUpload: Function,
   handleInlineImageUpload: Function,
+  // UX9: drives the Send-button copy. When the agent is composing a private
+  // note, "Send" reads as "Add note" (and the "Send & set as ..." dropdown
+  // entries become "Add note and set as ..."). Internal-only writes don't
+  // get sent anywhere, so the verb being "send" was misleading.
+  messageType: {
+    type: String,
+    default: 'reply'
+  },
   // Whether the editor has anything worth discarding. Drives visibility of
   // the delete-draft button — no point surfacing it on an empty box.
   hasDraft: {

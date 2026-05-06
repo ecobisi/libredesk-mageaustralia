@@ -100,6 +100,7 @@
         @aiPromptSelected="handleAiPromptSelected"
         @send="handleSend"
         @mentionsChanged="handleMentionsChanged"
+        @filesDropped="handleDroppedFiles"
       />
     </div>
 
@@ -128,6 +129,7 @@
       :isSending="isSending"
       :enableSend="enableSend"
       :handleSend="handleSend"
+      :messageType="messageType"
       @emojiSelect="handleEmojiSelect"
     />
   </div>
@@ -239,7 +241,11 @@ const emit = defineEmits([
   'fileUpload',
   'inlineImageUpload',
   'fileDelete',
-  'aiPromptSelected'
+  'aiPromptSelected',
+  // UX9: TextEditor splits dropped files into images (inserted inline) and
+  // non-images (forwarded here). Parent ReplyBox treats them as regular
+  // attachment uploads.
+  'filesDropped'
 ])
 
 const conversationStore = useConversationStore()
@@ -312,6 +318,12 @@ const handleSend = async () => {
 
 const handleFileUpload = (event) => {
   emit('fileUpload', event)
+}
+
+// UX9: forward non-image drops up to ReplyBox so they go through the regular
+// attachment upload path.
+const handleDroppedFiles = (files) => {
+  emit('filesDropped', files)
 }
 
 const handleOnFileDelete = (uuid) => {

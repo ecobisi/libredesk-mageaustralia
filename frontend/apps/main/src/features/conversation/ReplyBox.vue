@@ -149,6 +149,7 @@
           @deleteDraft="handleDeleteDraft"
           @fileUpload="handleFileUpload"
           @fileDelete="handleFileDelete"
+          @filesDropped="uploadFiles"
           @aiPromptSelected="handleAiPromptSelected"
           class="h-full flex-grow"
         />
@@ -188,6 +189,7 @@
         @deleteDraft="handleDeleteDraft"
         @fileUpload="handleFileUpload"
         @fileDelete="handleFileDelete"
+        @filesDropped="uploadFiles"
         @aiPromptSelected="handleAiPromptSelected"
       />
     </div>
@@ -261,6 +263,11 @@ const {
   uploadingFiles,
   handleFileUpload,
   handleFileDelete,
+  // UX9: programmatic upload entry — wraps a File[] in a synthetic event and
+  // pushes it through handleFileUpload. Used by the editor's drop handler so
+  // non-image files dragged into the editor land in the same upload pipeline
+  // as the paperclip-button uploads.
+  uploadFiles,
   mediaFiles,
   clearMediaFiles,
   setMediaFiles
