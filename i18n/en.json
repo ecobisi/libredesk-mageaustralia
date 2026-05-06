@@ -533,6 +533,7 @@
   "conversation.list.column.subject": "Subject",
   "conversation.list.column.updated": "Updated",
   "conversation.list.noSubject": "No subject",
+  "conversation.list.pendingUpdates": "{count} update | {count} update | {count} updates",
   "conversation.list.preview.latestReplyAgent": "Latest reply (agent)",
   "conversation.list.preview.latestReplyCustomer": "Latest reply (customer)",
   "conversation.list.preview.originalMessage": "Original message",

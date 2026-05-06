@@ -166,7 +166,13 @@ export const useConversationStore = defineStore('conversation', () => {
     // list. Merged into `listFilters` on every fetch. Separated from the
     // route-derived base filters so re-fetching the list doesn't double-add
     // pills, and so the pill UI has a single source of truth.
-    adHocFilters: []
+    adHocFilters: [],
+    // Counter for WebSocket-driven changes that would otherwise auto-refresh
+    // the list (new conversations or updates landing on conversations not
+    // currently in the visible list). Surfaced as a "X updates" pill so the
+    // agent applies them when convenient instead of having rows shuffle
+    // under their cursor while triaging. Reset to 0 on apply / reset.
+    pendingUpdates: 0
   })
 
   const conversation = reactive({
@@ -862,12 +868,20 @@ export const useConversationStore = defineStore('conversation', () => {
     pendingNotificationUUIDs.add(uuid)
   }
 
-  // Debounced to prevent apis calls during many WS events in a short time.
-  const debouncedFetchFirstPage = useDebounceFn(fetchFirstPageConversations, 1000)
+  // Debounced to coalesce rapid successive fetches of conversation
+  // participants triggered by message-update bursts.
   const debouncedFetchParticipants = useDebounceFn(fetchParticipants, 400)
 
-  function refreshConversationList () {
-    debouncedFetchFirstPage()
+  // Called from the WebSocket new-message handler. If the conversation is
+  // already in the visible list, the in-list row gets updated by the
+  // mergeConversationUpdate / updateConversationMessage paths so we do
+  // nothing here. If it's not in the list (new conversation, or one that
+  // would now be on the first page), buffer it as a pending update instead
+  // of auto-refetching — the pill in ConversationList lets the agent apply
+  // pending updates on their schedule rather than mid-triage.
+  function refreshConversationList (conversationUUID) {
+    if (conversationUUID && isConversationInList(conversationUUID)) return
+    conversations.pendingUpdates++
   }
 
   function updateConversationLastMessage (uuid, message) {
@@ -987,9 +1001,20 @@ export const useConversationStore = defineStore('conversation', () => {
 
   function addNewConversation (conversation) {
     if (!isConversationInList(conversation.uuid)) {
-      // Fetch list of conversations again.
-      fetchFirstPageConversations()
+      // Buffer as a pending update — the pill in ConversationList lets the
+      // agent pull new rows in when ready instead of having the list
+      // refetch under them.
+      conversations.pendingUpdates++
     }
+  }
+
+  // Called when the agent clicks the pending-updates pill. Drops the
+  // current page state and refetches from the top so any buffered new /
+  // moved rows actually show up.
+  function applyPendingUpdates () {
+    conversations.pendingUpdates = 0
+    resetConversations()
+    reFetchConversationsList()
   }
 
   function mergeMessageUpdate (data) {
@@ -1092,6 +1117,7 @@ export const useConversationStore = defineStore('conversation', () => {
   function resetConversations () {
     conversations.data = []
     conversations.page = 1
+    conversations.pendingUpdates = 0
     seenConversationUUIDs = new Map()
     clearSelection()
   }
@@ -1226,6 +1252,7 @@ export const useConversationStore = defineStore('conversation', () => {
     mergeConversationUpdate,
     mergeContactUpdate,
     addNewConversation,
+    applyPendingUpdates,
     getContactFullName,
     fetchParticipants,
     fetchNextMessages,

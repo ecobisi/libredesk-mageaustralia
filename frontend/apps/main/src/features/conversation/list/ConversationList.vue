@@ -249,6 +249,21 @@
       </div>
     </div>
 
+    <!-- Pending updates pill -->
+    <div
+      v-if="conversationStore.conversations.pendingUpdates > 0"
+      class="flex justify-center py-1.5 border-b shrink-0"
+    >
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border bg-background text-sm font-medium hover:bg-accent transition-colors shadow-sm"
+        @click="conversationStore.applyPendingUpdates()"
+      >
+        <RefreshCw class="w-3.5 h-3.5 text-primary" />
+        {{ t('conversation.list.pendingUpdates', conversationStore.conversations.pendingUpdates, { count: conversationStore.conversations.pendingUpdates }) }}
+      </button>
+    </div>
+
     <!-- Content -->
     <div class="flex-grow overflow-y-auto overflow-x-auto">
       <EmptyList
@@ -357,7 +372,7 @@
 import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { MessageCircleQuestion, MessageCircleWarning, ChevronDown, Loader2, X, LayoutList, Table2, Trash2 } from 'lucide-vue-next'
+import { MessageCircleQuestion, MessageCircleWarning, ChevronDown, Loader2, X, LayoutList, Table2, Trash2, RefreshCw } from 'lucide-vue-next'
 import { Button } from '@shared-ui/components/ui/button'
 import { Checkbox } from '@shared-ui/components/ui/checkbox'
 import {

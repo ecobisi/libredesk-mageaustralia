@@ -79,7 +79,7 @@ export class WebSocketClient {
             }
           }
 
-          this.convStore.refreshConversationList()
+          this.convStore.refreshConversationList(data.data.conversation_uuid)
           this.convStore.updateConversationMessage(data.data)
         },
         // Property updates for conversation and message.
