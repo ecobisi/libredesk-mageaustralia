@@ -31,9 +31,26 @@ export const formatDuration = (seconds, showSeconds = true) => {
 }
 
 export const formatMessageTimestamp = (time) => {
-  return format(time, 'd MMM, hh:mm a')
+  const now = new Date()
+  const date = new Date(time)
+  const mins = differenceInMinutes(now, date)
+  const hours = differenceInHours(now, date)
+  const days = differenceInDays(now, date)
+
+  let relative
+  if (mins < 1) relative = 'Just now'
+  else if (mins < 60) relative = mins === 1 ? '1 minute ago' : `${mins} minutes ago`
+  else if (hours < 24) relative = hours === 1 ? '1 hour ago' : `${hours} hours ago`
+  else if (days < 30) relative = days === 1 ? '1 day ago' : `${days} days ago`
+  else relative = null
+
+  const fullDate = format(date, "EEE, d MMM yyyy 'at' h:mm a")
+  if (relative) {
+    return `${relative} (${fullDate})`
+  }
+  return fullDate
 }
 
 export const formatFullTimestamp = (time) => {
-  return format(time, 'd MMM yyyy, hh:mm a')
+  return format(time, "EEE, d MMM yyyy 'at' h:mm a")
 }
