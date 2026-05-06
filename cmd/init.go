@@ -658,7 +658,7 @@ func initEmailInbox(inboxRecord imodels.Inbox, msgStore inbox.MessageStore, usrS
 		return nil, fmt.Errorf("initializing `%s` inbox: `%s` error : %w", inboxRecord.Channel, inboxRecord.Name, err)
 	}
 
-		log.Printf(" %s inbox successfully initialized", inboxRecord.Name, inboxRecord.Channel)
+		log.Printf(" %s (%s) inbox successfully initialized", inboxRecord.Name, inboxRecord.Channel)
 
 	return inbox, nil
 }
@@ -680,7 +680,7 @@ func initMessengerInbox(inboxRecord imodels.Inbox, msgStore inbox.MessageStore, 
 		return nil, fmt.Errorf("initializing %s inbox %s: %w", inboxRecord.Channel, inboxRecord.Name, err)
 	}
 
-		log.Printf(" %s inbox successfully initialized", inboxRecord.Name, inboxRecord.Channel)
+		log.Printf(" %s (%s) inbox successfully initialized", inboxRecord.Name, inboxRecord.Channel)
 	return inb, nil
 }
 
