@@ -327,9 +327,20 @@
     }
   }
   // Light-mode hardcoded text color in fresh's typography section punches
-  // through on dark message bubbles. Restore foreground.
+  // through on dark message bubbles. Restore foreground. Then defeat
+  // inline `style="color: #000"` from Outlook-generated email HTML by
+  // forcing children to inherit; spare anchors (links should stay primary)
+  // and elements with deliberate background colors (CAUTION banners,
+  // highlighted blocks — their bg implies their text colour was chosen
+  // for contrast against that bg, not against the page).
   .message-bubble .native-html {
     color: hsl(var(--foreground));
+    *:not(a):not([style*="background"]) {
+      color: inherit !important;
+    }
+    a {
+      color: hsl(var(--primary));
+    }
   }
   *::-webkit-scrollbar-thumb {
     background-color: hsl(220 13% 25%);
