@@ -24,6 +24,7 @@ type ActivityLog struct {
 	TargetModelType     string    `db:"target_model_type" json:"target_model_type"`
 	TargetModelID       int       `db:"target_model_id" json:"target_model_id"`
 	IP                  string    `db:"ip" json:"ip"`
+	Country             string    `db:"country" json:"country"`
 
 	Total int `db:"total" json:"-"`
 }

@@ -647,7 +647,8 @@ CREATE TABLE activity_logs (
 	actor_id INT REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
 	target_model_type TEXT NOT NULL,
 	target_model_id BIGINT NOT NULL,
-	ip INET
+	ip INET,
+	country VARCHAR(2) NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS index_activity_logs_on_actor_id ON activity_logs (actor_id);
 CREATE INDEX IF NOT EXISTS index_activity_logs_on_activity_type ON activity_logs (activity_type);

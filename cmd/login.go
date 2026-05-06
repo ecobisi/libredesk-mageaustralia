@@ -18,6 +18,7 @@ func handleLogin(r *fastglue.Request) error {
 	var (
 		app      = r.Context.(*App)
 		ip       = realip.FromRequest(r.RequestCtx)
+		country  = string(r.RequestCtx.Request.Header.Peek("CF-IPCountry"))
 		loginReq loginRequest
 	)
 
@@ -62,7 +63,7 @@ func handleLogin(r *fastglue.Request) error {
 	}
 
 	// Insert activity log.
-	if err := app.activityLog.Login(user.ID, user.Email.String, ip); err != nil {
+	if err := app.activityLog.Login(user.ID, user.Email.String, ip, country); err != nil {
 		app.lo.Error("error creating login activity log", "error", err)
 	}
 
@@ -72,13 +73,14 @@ func handleLogin(r *fastglue.Request) error {
 // handleLogout logs out the user and redirects to the dashboard.
 func handleLogout(r *fastglue.Request) error {
 	var (
-		app   = r.Context.(*App)
-		auser = r.RequestCtx.UserValue("user").(amodels.User)
-		ip    = realip.FromRequest(r.RequestCtx)
+		app     = r.Context.(*App)
+		auser   = r.RequestCtx.UserValue("user").(amodels.User)
+		ip      = realip.FromRequest(r.RequestCtx)
+		country = string(r.RequestCtx.Request.Header.Peek("CF-IPCountry"))
 	)
 
 	// Insert activity log.
-	if err := app.activityLog.Logout(auser.ID, auser.Email, ip); err != nil {
+	if err := app.activityLog.Logout(auser.ID, auser.Email, ip, country); err != nil {
 		app.lo.Error("error creating logout activity log", "error", err)
 	}
 

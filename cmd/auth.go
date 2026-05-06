@@ -60,6 +60,7 @@ func handleOIDCCallback(r *fastglue.Request) error {
 		state           = string(r.RequestCtx.QueryArgs().Peek("state"))
 		providerID, err = strconv.Atoi(string(r.RequestCtx.UserValue("id").(string)))
 		ip              = realip.FromRequest(r.RequestCtx)
+		country         = string(r.RequestCtx.Request.Header.Peek("CF-IPCountry"))
 	)
 	if err != nil {
 		app.lo.Error("error parsing provider id", "error", err)
@@ -105,7 +106,7 @@ func handleOIDCCallback(r *fastglue.Request) error {
 	}
 
 	// Insert activity log.
-	if err := app.activityLog.Login(user.ID, user.Email.String, ip); err != nil {
+	if err := app.activityLog.Login(user.ID, user.Email.String, ip, country); err != nil {
 		app.lo.Error("error creating login activity log", "error", err)
 	}
 

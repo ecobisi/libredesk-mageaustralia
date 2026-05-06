@@ -70,7 +70,7 @@
             t('globals.terms.timestamp'),
             t('globals.terms.ipAddress')
           ]"
-          :keys="['activity_description', 'created_at', 'ip']"
+          :keys="['activity_description', 'created_at', 'ip_display']"
           :data="activityLogs"
           :showDelete="false"
           :loading="loading"
@@ -106,6 +106,18 @@ import { useI18n } from 'vue-i18n'
 import { format } from 'date-fns'
 import PaginationBar from '@main/components/pagination/PaginationBar.vue'
 import api from '../../../api'
+
+// Map a 2-letter ISO 3166-1 alpha-2 code (e.g. "AU", "GB") to the matching
+// emoji flag. Each letter A-Z maps to a regional indicator symbol in the
+// Unicode range starting at U+1F1E6, and the pair renders as a flag in any
+// emoji-aware font. Returns '' for missing/invalid codes so the activity log
+// just shows the IP without a flag (graceful degradation when the request
+// didn't have a CF-IPCountry header).
+function countryFlag(code) {
+  if (!code || code.length !== 2) return ''
+  const c = code.toUpperCase()
+  return String.fromCodePoint(...[...c].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65))
+}
 
 const activityLogs = ref([])
 const { t } = useI18n()
@@ -146,10 +158,12 @@ async function fetchActivityLogs() {
     totalCount.value = resp.data.data.count
     totalPages.value = resp.data.data.total_pages
 
-    // Format the created_at field
+    // Format the created_at field and prepend a country flag emoji to the IP
+    // when the row has a country code (set from the CF-IPCountry header).
     activityLogs.value = activityLogs.value.map((log) => ({
       ...log,
-      created_at: format(new Date(log.created_at), 'PPpp')
+      created_at: format(new Date(log.created_at), 'PPpp'),
+      ip_display: (log.country ? countryFlag(log.country) + ' ' : '') + (log.ip || '')
     }))
   } catch (err) {
     console.error('Error fetching activity logs:', err)

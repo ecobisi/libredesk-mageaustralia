@@ -94,6 +94,7 @@ func handleUpdateAgentAvailability(r *fastglue.Request) error {
 		app      = r.Context.(*App)
 		auser    = r.RequestCtx.UserValue("user").(amodels.User)
 		ip       = realip.FromRequest(r.RequestCtx)
+		country  = string(r.RequestCtx.Request.Header.Peek("CF-IPCountry"))
 		availReq availabilityRequest
 	)
 
@@ -124,7 +125,7 @@ func handleUpdateAgentAvailability(r *fastglue.Request) error {
 
 	// Skip activity log when returning online from idle-away to avoid log spam.
 	if !(agent.AvailabilityStatus == models.Away && availReq.Status == models.Online) {
-		if err := app.activityLog.UserAvailability(auser.ID, auser.Email, availReq.Status, ip, "", 0); err != nil {
+		if err := app.activityLog.UserAvailability(auser.ID, auser.Email, availReq.Status, ip, country, "", 0); err != nil {
 			app.lo.Error("error creating activity log", "error", err)
 		}
 	}
@@ -248,11 +249,12 @@ func handleCreateAgent(r *fastglue.Request) error {
 // handleUpdateAgent updates an agent.
 func handleUpdateAgent(r *fastglue.Request) error {
 	var (
-		app   = r.Context.(*App)
-		req   = agentReq{}
-		auser = r.RequestCtx.UserValue("user").(amodels.User)
-		ip    = realip.FromRequest(r.RequestCtx)
-		id, _ = strconv.Atoi(r.RequestCtx.UserValue("id").(string))
+		app     = r.Context.(*App)
+		req     = agentReq{}
+		auser   = r.RequestCtx.UserValue("user").(amodels.User)
+		ip      = realip.FromRequest(r.RequestCtx)
+		country = string(r.RequestCtx.Request.Header.Peek("CF-IPCountry"))
+		id, _   = strconv.Atoi(r.RequestCtx.UserValue("id").(string))
 	)
 	if id == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.empty", "name", "`id`"), nil, envelope.InputError)
@@ -283,14 +285,14 @@ func handleUpdateAgent(r *fastglue.Request) error {
 
 	// Create activity log if user availability status changed.
 	if oldAvailabilityStatus != req.AvailabilityStatus {
-		if err := app.activityLog.UserAvailability(auser.ID, auser.Email, req.AvailabilityStatus, ip, req.Email, id); err != nil {
+		if err := app.activityLog.UserAvailability(auser.ID, auser.Email, req.AvailabilityStatus, ip, country, req.Email, id); err != nil {
 			app.lo.Error("error creating activity log", "error", err)
 		}
 	}
 
 	// Log activity if password was changed.
 	if req.NewPassword != "" {
-		if err := app.activityLog.PasswordSet(auser.ID, auser.Email, ip, id, req.Email); err != nil {
+		if err := app.activityLog.PasswordSet(auser.ID, auser.Email, ip, country, id, req.Email); err != nil {
 			app.lo.Error("error creating activity log", "error", err)
 		}
 	}

@@ -84,7 +84,10 @@ func (m *Manager) GetAll(order, orderBy, filtersJSON string, page, pageSize int)
 }
 
 // Login records a login event for the given user.
-func (al *Manager) Login(userID int, email, ip string) error {
+//
+// `country` is a 2-letter ISO 3166-1 alpha-2 code (typically from the
+// CF-IPCountry header, empty when not behind Cloudflare).
+func (al *Manager) Login(userID int, email, ip, country string) error {
 	description := al.i18n.Ts("activityLog.agentLogin",
 		"email", email,
 		"userId", fmt.Sprintf("#%d", userID))
@@ -95,11 +98,12 @@ func (al *Manager) Login(userID int, email, ip string) error {
 		umodels.UserModel,
 		userID,
 		ip,
+		country,
 	)
 }
 
 // Logout records a logout event for the given user.
-func (al *Manager) Logout(userID int, email, ip string) error {
+func (al *Manager) Logout(userID int, email, ip, country string) error {
 	description := al.i18n.Ts("activityLog.agentLogout",
 		"email", email,
 		"userId", fmt.Sprintf("#%d", userID))
@@ -110,11 +114,12 @@ func (al *Manager) Logout(userID int, email, ip string) error {
 		umodels.UserModel,
 		userID,
 		ip,
+		country,
 	)
 }
 
 // Away records an away event for the given user.
-func (al *Manager) Away(actorID int, actorEmail, ip string, targetID int, targetEmail string) error {
+func (al *Manager) Away(actorID int, actorEmail, ip, country string, targetID int, targetEmail string) error {
 	var description string
 	if targetID != 0 && targetEmail != "" && (targetID != actorID || targetEmail != actorEmail) {
 		description = al.i18n.Ts("activityLog.agentAway",
@@ -134,11 +139,12 @@ func (al *Manager) Away(actorID int, actorEmail, ip string, targetID int, target
 		umodels.UserModel, /*target_model_type*/
 		actorID,           /*target_model_id*/
 		ip,
+		country,
 	)
 }
 
 // AwayReassigned records an away and reassigned event for the given user.
-func (al *Manager) AwayReassigned(actorID int, actorEmail, ip string, targetID int, targetEmail string) error {
+func (al *Manager) AwayReassigned(actorID int, actorEmail, ip, country string, targetID int, targetEmail string) error {
 	var description string
 	if targetID != 0 && targetEmail != "" && (targetID != actorID || targetEmail != actorEmail) {
 		description = al.i18n.Ts("activityLog.agentAwayReassign",
@@ -158,11 +164,12 @@ func (al *Manager) AwayReassigned(actorID int, actorEmail, ip string, targetID i
 		umodels.UserModel, /*target_model_type*/
 		actorID,           /*target_model_id*/
 		ip,
+		country,
 	)
 }
 
 // Online records an online event for the given user.
-func (al *Manager) Online(actorID int, actorEmail, ip string, targetID int, targetEmail string) error {
+func (al *Manager) Online(actorID int, actorEmail, ip, country string, targetID int, targetEmail string) error {
 	var description string
 	if targetID != 0 && targetEmail != "" && (targetID != actorID || targetEmail != actorEmail) {
 		description = al.i18n.Ts("activityLog.agentOnline",
@@ -182,23 +189,24 @@ func (al *Manager) Online(actorID int, actorEmail, ip string, targetID int, targ
 		umodels.UserModel, /*target_model_type*/
 		actorID,           /*target_model_id*/
 		ip,
+		country,
 	)
 }
 
 // UserAvailability records a user availability event for the given user.
-func (al *Manager) UserAvailability(actorID int, actorEmail, status, ip, targetEmail string, targetID int) error {
+func (al *Manager) UserAvailability(actorID int, actorEmail, status, ip, country, targetEmail string, targetID int) error {
 	switch status {
 	case umodels.Online:
-		if err := al.Online(actorID, actorEmail, ip, targetID, targetEmail); err != nil {
+		if err := al.Online(actorID, actorEmail, ip, country, targetID, targetEmail); err != nil {
 			return err
 		}
 	case umodels.AwayManual:
-		if err := al.Away(actorID, actorEmail, ip, targetID, targetEmail); err != nil {
+		if err := al.Away(actorID, actorEmail, ip, country, targetID, targetEmail); err != nil {
 			al.lo.Error("error logging away activity", "error", err)
 			return err
 		}
 	case umodels.AwayAndReassigning:
-		if err := al.AwayReassigned(actorID, actorEmail, ip, targetID, targetEmail); err != nil {
+		if err := al.AwayReassigned(actorID, actorEmail, ip, country, targetID, targetEmail); err != nil {
 			al.lo.Error("error logging away and reassigning activity", "error", err)
 			return err
 		}
@@ -207,7 +215,7 @@ func (al *Manager) UserAvailability(actorID int, actorEmail, status, ip, targetE
 }
 
 // PasswordSet records a password set event.
-func (al *Manager) PasswordSet(actorID int, actorEmail, ip string, targetID int, targetEmail string) error {
+func (al *Manager) PasswordSet(actorID int, actorEmail, ip, country string, targetID int, targetEmail string) error {
 	description := al.i18n.Ts("activityLog.agentPasswordSet",
 		"actorEmail", actorEmail,
 		"actorId", fmt.Sprintf("#%d", actorID),
@@ -220,11 +228,12 @@ func (al *Manager) PasswordSet(actorID int, actorEmail, ip string, targetID int,
 		umodels.UserModel,
 		targetID,
 		ip,
+		country,
 	)
 }
 
 // RolePermissionsChanged records a role permissions change event.
-func (al *Manager) RolePermissionsChanged(actorID int, actorEmail, ip string, roleID int, roleName string, added, removed []string) error {
+func (al *Manager) RolePermissionsChanged(actorID int, actorEmail, ip, country string, roleID int, roleName string, added, removed []string) error {
 	var description string
 	if len(removed) > 0 && len(added) > 0 {
 		description = al.i18n.Ts("activityLog.rolePermissionsChanged",
@@ -258,12 +267,13 @@ func (al *Manager) RolePermissionsChanged(actorID int, actorEmail, ip string, ro
 		"role",
 		roleID,
 		ip,
+		country,
 	)
 }
 
 // create creates a new activity log in DB.
-func (m *Manager) create(activityType, activityDescription string, actorID int, targetModelType string, targetModelID int, ip string) error {
-	if _, err := m.q.InsertActivity.Exec(activityType, activityDescription, actorID, targetModelType, targetModelID, ip); err != nil {
+func (m *Manager) create(activityType, activityDescription string, actorID int, targetModelType string, targetModelID int, ip, country string) error {
+	if _, err := m.q.InsertActivity.Exec(activityType, activityDescription, actorID, targetModelType, targetModelID, ip, country); err != nil {
 		m.lo.Error("error inserting activity log", "error", err)
 		return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 	}
