@@ -39,4 +39,5 @@ type TrashSettings struct {
 	AutoTrashResolvedDays int `json:"trash.auto_trash_resolved_days" db:"trash.auto_trash_resolved_days"`
 	AutoTrashSpamDays     int `json:"trash.auto_trash_spam_days" db:"trash.auto_trash_spam_days"`
 	AutoDeleteDays        int `json:"trash.auto_delete_days" db:"trash.auto_delete_days"`
+	ActivityPurgeDays     int `json:"trash.activity_purge_days" db:"trash.activity_purge_days"`
 }

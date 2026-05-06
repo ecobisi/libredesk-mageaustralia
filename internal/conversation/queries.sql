@@ -1066,3 +1066,30 @@ WHERE c.contact_id = $1
   AND c.status_id NOT IN (3, 4, 5, 6)
 ORDER BY c.created_at DESC
 LIMIT 1;
+
+-- name: get-recent-activities
+-- Global activity feed (Reports > Recent Activities). Returns activity
+-- messages (status changes, assignments) and outgoing agent messages joined
+-- to the parent conversation and acting user so the timeline UI can render
+-- without N+1 lookups. COUNT(*) OVER() in the same row gives the total for
+-- pagination without a second round trip.
+SELECT COUNT(*) OVER() as total,
+    cm.id, cm.created_at, cm.type, cm.content, cm.sender_type,
+    c.uuid as conversation_uuid, c.reference_number, c.subject,
+    u.first_name as actor_first_name, u.last_name as actor_last_name,
+    u.avatar_url as actor_avatar_url
+FROM conversation_messages cm
+JOIN conversations c ON c.id = cm.conversation_id
+JOIN users u ON u.id = cm.sender_id
+WHERE cm.type IN ('activity', 'outgoing')
+ORDER BY cm.created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: purge-old-activities
+-- Hourly cleanup pass driven by trash.activity_purge_days. Deletes only
+-- activity-type messages (status changes, assignments) older than $1 days,
+-- never agent replies or incoming customer messages. Caller skips the call
+-- when retention is 0 to disable the pass entirely.
+DELETE FROM conversation_messages
+WHERE type = 'activity'
+AND created_at < NOW() - INTERVAL '1 day' * $1;

@@ -337,6 +337,10 @@ type queries struct {
 	AutoTrashSpam             *sqlx.Stmt `query:"auto-trash-old-spam"`
 	PurgeOldTrash             *sqlx.Stmt `query:"purge-old-trash"`
 	PurgeOldTrashMedia        *sqlx.Stmt `query:"purge-old-trash-media"`
+	PurgeOldActivities        *sqlx.Stmt `query:"purge-old-activities"`
+
+	// Recent activities feed.
+	GetRecentActivities *sqlx.Stmt `query:"get-recent-activities"`
 
 	// Merge queries.
 	GetConversationsByUUIDs         *sqlx.Stmt `query:"get-conversations-by-uuids"`
@@ -2345,4 +2349,23 @@ func (m *Manager) MergeConversations(primaryUUID string, secondaryUUIDs []string
 
 func (c *Manager) formatRefMarker(ref string) string {
 	return strings.ReplaceAll(c.subjectRefFormat, "{ref}", ref)
+}
+
+// GetRecentActivities returns one paginated page of the global activity feed
+// shown under Reports > Recent Activities, plus the total row count. The
+// total is read from the COUNT(*) OVER() column on the first returned row;
+// when the page is empty the total is reported as 0 and pagination collapses
+// to "no results" in the UI.
+func (c *Manager) GetRecentActivities(page, pageSize int) ([]models.RecentActivity, int, error) {
+	offset := (page - 1) * pageSize
+	var activities []models.RecentActivity
+	if err := c.q.GetRecentActivities.Select(&activities, pageSize, offset); err != nil {
+		c.lo.Error("error fetching recent activities", "error", err)
+		return nil, 0, envelope.NewError(envelope.GeneralError, "Error fetching recent activities", nil)
+	}
+	total := 0
+	if len(activities) > 0 {
+		total = activities[0].Total
+	}
+	return activities, total, nil
 }

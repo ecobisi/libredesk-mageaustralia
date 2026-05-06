@@ -54,7 +54,8 @@ import {
   Link,
   BarChart3,
   CircleUser,
-  Contact
+  Contact,
+  Activity
 } from 'lucide-vue-next'
 
 const navIconMap = {
@@ -80,7 +81,8 @@ const navIconMap = {
   BarChart3,
   CircleUser,
   Contact,
-  Trash2
+  Trash2,
+  Activity
 }
 import {
   DropdownMenu,

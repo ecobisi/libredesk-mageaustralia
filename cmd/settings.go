@@ -183,7 +183,7 @@ func handleUpdateTrashSettings(r *fastglue.Request) error {
 	if err := r.Decode(&req, "json"); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
 	}
-	if req.AutoTrashResolvedDays < 0 || req.AutoTrashSpamDays < 0 || req.AutoDeleteDays < 0 {
+	if req.AutoTrashResolvedDays < 0 || req.AutoTrashSpamDays < 0 || req.AutoDeleteDays < 0 || req.ActivityPurgeDays < 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Day values must be 0 or greater", nil, envelope.InputError)
 	}
 	if err := app.setting.Update(req); err != nil {

@@ -4,6 +4,12 @@ export const reportsNavItems = [
     href: '/reports/overview',
     permission: 'reports:manage',
     icon: 'BarChart3'
+  },
+  {
+    titleKey: 'report.recentActivities.title',
+    href: '/reports/activities',
+    permission: 'reports:manage',
+    icon: 'Activity'
   }
 ]
 
