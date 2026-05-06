@@ -289,9 +289,19 @@ const visibleMacros = computed(() => {
   return matched
 })
 
+let ignoreNextShortcut = false
+
 const { Meta_K, Ctrl_K } = useMagicKeys({
   passive: false,
   onEventFired(e) {
+    // Ignore during IME composition (Chinese/Japanese/Korean input).
+    // Also ignore synthetic events from browser extensions (e.g. Grammarly)
+    // which can fire fake Ctrl+K events during text processing.
+    if (e.isComposing || !e.isTrusted) {
+      ignoreNextShortcut = true
+      return
+    }
+    ignoreNextShortcut = false
     if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
     }
@@ -299,7 +309,7 @@ const { Meta_K, Ctrl_K } = useMagicKeys({
 })
 
 watch([Meta_K, Ctrl_K], ([mac, win]) => {
-  if (mac || win) toggleOpen()
+  if ((mac || win) && !ignoreNextShortcut) toggleOpen()
 })
 
 const highlightedMacro = ref(null)

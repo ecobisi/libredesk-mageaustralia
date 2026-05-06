@@ -60,7 +60,8 @@ type Config struct {
 }
 
 // defaultSessionLifetime is used when Config.SessionLifetime is unset or non-positive.
-const defaultSessionLifetime = 9 * time.Hour
+// 96h (4 days) sliding TTL, so agents don't get logged out over the weekend (Friday to Monday).
+const defaultSessionLifetime = 96 * time.Hour
 
 // Auth is the auth service it manages OIDC authentication and sessions
 type Auth struct {
@@ -152,7 +153,9 @@ func New(cfg Config, i18n *i18n.I18n, rd *redis.Client, logger *logf.Logger) (*A
 	})
 
 	st := sessredisstore.New(context.TODO(), rd)
-	st.SetTTL(lifetime, false)
+	// extend=true gives a sliding TTL: each request bumps the redis expiry forward by `lifetime`.
+	// Combined with the 96h default this means agents only get logged out after 4 days of zero activity.
+	st.SetTTL(lifetime, true)
 	sess.UseStore(st)
 	sess.SetCookieHooks(simpleSessGetCookieCB, simpleSessSetCookieCB)
 

@@ -21,8 +21,9 @@ address = "0.0.0.0:9000"
 socket = ""
 # Do NOT disable secure cookies in production environment if you don't know exactly what you're doing!
 disable_secure_cookies = false
-# Session lifetime duration.
-session_lifetime = "9h"
+# Session lifetime duration. Sliding (each request bumps the redis expiry forward).
+# 96h survives Friday to Monday so agents aren't logged out over the weekend.
+session_lifetime = "96h"
 # Request read and write timeouts.
 # 30s allows replies with large quoted email threads to finish uploading
 # from high-latency clients before the server kills the connection.
