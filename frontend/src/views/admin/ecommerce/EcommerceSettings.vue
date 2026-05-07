@@ -307,6 +307,12 @@ async function testOrderLookup() {
                 </Button>
               </div>
               <div v-if="customerResult" class="mt-2 p-3 bg-muted rounded-md text-sm">
+                <div v-if="customerResult.warnings && customerResult.warnings.length" class="mb-2 p-2 bg-destructive/10 border border-destructive/30 rounded text-destructive">
+                  <strong>Lookup error:</strong>
+                  <ul class="list-disc list-inside ml-2">
+                    <li v-for="(w, i) in customerResult.warnings" :key="i">{{ w }}</li>
+                  </ul>
+                </div>
                 <div v-if="customerResult.customer">
                   <strong>Customer:</strong> {{ customerResult.customer.first_name }} {{ customerResult.customer.last_name }}
                   ({{ customerResult.customer.email }})
@@ -319,7 +325,7 @@ async function testOrderLookup() {
                     </li>
                   </ul>
                 </div>
-                <div v-if="!customerResult.customer && (!customerResult.recent_orders || !customerResult.recent_orders.length)">
+                <div v-if="!customerResult.customer && (!customerResult.recent_orders || !customerResult.recent_orders.length) && (!customerResult.warnings || !customerResult.warnings.length)">
                   No customer or orders found for this email.
                 </div>
               </div>
