@@ -751,6 +751,8 @@ export default {
   updateEcommerceSettings,
   getEcommerceStatus,
   testEcommerceConnection,
+  testEcommerceCustomer,
+  testEcommerceOrder,
   searchConversations,
   searchMessages,
   searchContacts,
