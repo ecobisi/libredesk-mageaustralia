@@ -20,9 +20,9 @@ type tokenResponse struct {
 }
 
 type authClient struct {
-	baseURL  string
-	email    string
-	password string
+	baseURL      string
+	clientID     string
+	clientSecret string
 
 	mu          sync.RWMutex
 	token       string
@@ -36,11 +36,11 @@ var debugLogOnce sync.Once
 // jwtPattern matches a JWT-shaped string (three base64-url chunks separated by dots).
 var jwtPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$`)
 
-func newAuthClient(baseURL, email, password string) *authClient {
+func newAuthClient(baseURL, clientID, clientSecret string) *authClient {
 	return &authClient{
-		baseURL:  baseURL,
-		email:    email,
-		password: password,
+		baseURL:      baseURL,
+		clientID:     clientID,
+		clientSecret: clientSecret,
 	}
 }
 
@@ -64,11 +64,13 @@ func (a *authClient) refreshToken() (string, error) {
 		return a.token, nil
 	}
 
-	// Maho API Platform v2 expects {email, password} JWT auth flow.
-	// The legacy OAuth2 client_credentials grant is no longer accepted.
+	// Maho API Platform v2 supports OAuth2 client_credentials grant for
+	// service integrations (the human-user customer grant uses email/password).
+	// LibreDesk is an integration, so we use client_credentials.
 	payload := map[string]string{
-		"email":    a.email,
-		"password": a.password,
+		"grant_type":    "client_credentials",
+		"client_id":     a.clientID,
+		"client_secret": a.clientSecret,
 	}
 	body, _ := json.Marshal(payload)
 
@@ -92,7 +94,7 @@ func (a *authClient) refreshToken() (string, error) {
 		return "", fmt.Errorf("POST %s returned %d: %s", tokenURL, resp.StatusCode, bodyStr)
 	}
 
-	// One-time debug log of raw response body so we can confirm the new
+	// One-time debug log of raw response body so we can confirm the
 	// wire format from Maho. Truncated to keep logs readable.
 	debugLogOnce.Do(func() {
 		preview := string(respBody)

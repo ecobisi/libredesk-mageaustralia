@@ -216,20 +216,20 @@ async function testOrderLookup() {
               <div class="space-y-2">
                 <Label for="client-id">
                   <template v-if="providerType === 'shopify'">API Key</template>
-                  <template v-else-if="providerType === 'magento1'">Email</template>
+                  <template v-else-if="providerType === 'magento1'">Client ID</template>
                   <template v-else>Integration Access Token</template>
                 </Label>
                 <Input
                   id="client-id"
                   v-model="clientID"
-                  :placeholder="hasConfig ? '(configured)' : providerType === 'magento1' ? 'admin@your-store.com' : 'Enter API key/token'"
+                  :placeholder="hasConfig ? '(configured)' : 'Enter client ID / API key'"
                 />
                 <p class="text-xs text-muted-foreground">
                   <template v-if="providerType === 'shopify'">
                     Your Shopify Admin API access token
                   </template>
                   <template v-else-if="providerType === 'magento1'">
-                    Maho admin email address (used for the v2 JWT auth flow)
+                    OAuth2 client ID for the Maho API Platform v2 client_credentials grant
                   </template>
                   <template v-else>
                     Integration Access Token from System > Extensions > Integrations
@@ -240,21 +240,21 @@ async function testOrderLookup() {
               <div class="space-y-2">
                 <Label for="client-secret">
                   <template v-if="providerType === 'shopify'">Admin API Secret Key</template>
-                  <template v-else-if="providerType === 'magento1'">Password</template>
+                  <template v-else-if="providerType === 'magento1'">Client Secret</template>
                   <template v-else>Integration Secret</template>
                 </Label>
                 <Input
                   id="client-secret"
                   v-model="clientSecret"
                   type="password"
-                  :placeholder="hasConfig ? 'Enter new password to change' : 'Enter password'"
+                  :placeholder="hasConfig ? 'Enter new secret to change' : 'Enter client secret / API secret'"
                 />
                 <p class="text-xs text-muted-foreground">
                   <template v-if="providerType === 'shopify'">
                     Your Shopify Admin API secret key (stored encrypted)
                   </template>
                   <template v-else-if="providerType === 'magento1'">
-                    Maho admin password (stored encrypted)
+                    OAuth2 client secret for the Maho API Platform v2 client_credentials grant (stored encrypted)
                   </template>
                   <template v-else>
                     Integration secret token (stored encrypted)
@@ -366,14 +366,14 @@ async function testOrderLookup() {
       </p>
       <h4 class="font-medium mb-2">Supported Platforms</h4>
       <ul class="text-sm text-muted-foreground list-disc list-inside space-y-1">
-        <li><strong>Maho Commerce</strong> - API Platform v2 with email/password JWT auth</li>
+        <li><strong>Maho Commerce</strong> - API Platform v2 with OAuth2 client_credentials</li>
         <li><strong>Magento 2</strong> - REST API with Integration tokens</li>
         <li><strong>Shopify</strong> - Admin API with access tokens</li>
       </ul>
       <h4 class="font-medium mt-4 mb-2">Maho Commerce Setup</h4>
       <ol class="text-sm text-muted-foreground list-decimal list-inside space-y-1">
-        <li>Use a Maho admin user that has API access enabled</li>
-        <li>Enter that admin's email address and password below</li>
+        <li>Create an API client with the client_credentials grant enabled</li>
+        <li>Enter the client ID and client secret below</li>
         <li>Enter your store URL (without /api)</li>
       </ol>
     </template>
