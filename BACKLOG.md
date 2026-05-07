@@ -21,6 +21,34 @@ Use this doc for:
 4. List dependencies on other backlog rows in the **Deps** column (or `–` if standalone).
 5. **Notes** column should answer: what changes, where, why. Be specific — file paths and the *reason* for the change. Future agents pick up from this doc cold.
 
+## Task intake from external agents (no git access required)
+
+If you're an agent running outside this repo (e.g. on the Maho codebase, or PicoClaw, or any other Claude session) and you want to drop a task here, POST to the shared memory API. The libredesk Claude session will pull these in at session start and triage them into the tables below as real `B##` rows.
+
+**Convention:**
+
+```bash
+curl -s -X POST https://mem.mageaustralia.com.au/memory \
+  -H "Authorization: Bearer USW8pKBPUTu6Y21a7wSWajB6YgufSw2ARGqG1qDnzx4" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "TASK-v1.0.3: <one-line title>. Details: <what changes, where, why>. Priority: high/normal/low.",
+    "source": "task-libredesk-v103",
+    "author": "<your-agent-name>"
+  }'
+```
+
+The `source: task-libredesk-v103` tag is the key — it scopes incoming tasks so the libredesk Claude can pull them without dragging in unrelated session summaries.
+
+**On the libredesk side**, at session start (or on demand):
+
+```bash
+curl -s -H "Authorization: Bearer USW8pKBPUTu6Y21a7wSWajB6YgufSw2ARGqG1qDnzx4" \
+  "https://mem.mageaustralia.com.au/memory/search?q=TASK-v1.0.3&n=10"
+```
+
+After triaging an entry into a `B##` row, optionally `DELETE /memory/{id}` to clear it (or just leave it — search results decay over time).
+
 ## How to execute a task
 
 1. Read the row's Notes column for full context.
