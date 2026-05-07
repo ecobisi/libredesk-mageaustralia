@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -17,9 +18,34 @@ import (
 
 // Client implements the ecommerce.Provider interface for Maho Commerce
 type Client struct {
-	baseURL string
-	auth    *authClient
-	http    *http.Client
+	baseURL   string
+	auth      *authClient
+	http      *http.Client
+	userAgent string
+}
+
+// userAgentString returns "libredesk/<version>" derived from the embedded
+// build info so Maho-side access logs can identify libredesk traffic.
+// Falls back to "libredesk/unknown" if build info isn't available (rare).
+func userAgentString() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		v := info.Main.Version
+		if v == "" || v == "(devel)" {
+			// Look for a VCS revision setting populated by `go build`.
+			for _, s := range info.Settings {
+				if s.Key == "vcs.revision" && s.Value != "" {
+					rev := s.Value
+					if len(rev) > 12 {
+						rev = rev[:12]
+					}
+					return "libredesk/" + rev
+				}
+			}
+			return "libredesk/devel"
+		}
+		return "libredesk/" + v
+	}
+	return "libredesk/unknown"
 }
 
 // New creates a new Maho Commerce client.
@@ -31,10 +57,12 @@ func New(config ecommerce.ProviderConfig) (*Client, error) {
 	if config.BaseURL == "" || config.ClientID == "" || config.ClientSecret == "" {
 		return nil, fmt.Errorf("magento1: baseURL, clientID, and clientSecret are required")
 	}
+	ua := userAgentString()
 	return &Client{
-		baseURL: config.BaseURL,
-		auth:    newAuthClient(config.BaseURL, config.ClientID, config.ClientSecret),
-		http: &http.Client{Timeout: 60 * time.Second},
+		baseURL:   config.BaseURL,
+		auth:      newAuthClient(config.BaseURL, config.ClientID, config.ClientSecret, ua),
+		http:      &http.Client{Timeout: 60 * time.Second},
+		userAgent: ua,
 	}, nil
 }
 
@@ -60,6 +88,7 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, params url.Valu
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", c.userAgent)
 
 	resp, err := c.http.Do(req)
 	if err != nil {

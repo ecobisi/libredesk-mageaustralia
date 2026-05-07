@@ -23,6 +23,9 @@ type authClient struct {
 	baseURL      string
 	clientID     string
 	clientSecret string
+	userAgent    string
+
+	httpClient *http.Client
 
 	mu          sync.RWMutex
 	token       string
@@ -36,11 +39,13 @@ var debugLogOnce sync.Once
 // jwtPattern matches a JWT-shaped string (three base64-url chunks separated by dots).
 var jwtPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$`)
 
-func newAuthClient(baseURL, clientID, clientSecret string) *authClient {
+func newAuthClient(baseURL, clientID, clientSecret, userAgent string) *authClient {
 	return &authClient{
 		baseURL:      baseURL,
 		clientID:     clientID,
 		clientSecret: clientSecret,
+		userAgent:    userAgent,
+		httpClient:   &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -77,7 +82,15 @@ func (a *authClient) refreshToken() (string, error) {
 	tokenURL := a.baseURL + "/api/rest/v2/auth/token"
 	log.Printf("[ecommerce] Requesting token from: %s", tokenURL)
 
-	resp, err := http.Post(tokenURL, "application/json", bytes.NewBuffer(body))
+	req, err := http.NewRequest(http.MethodPost, tokenURL, bytes.NewBuffer(body))
+	if err != nil {
+		return "", fmt.Errorf("build POST %s failed: %w", tokenURL, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", a.userAgent)
+
+	resp, err := a.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("POST %s failed: %w", tokenURL, err)
 	}

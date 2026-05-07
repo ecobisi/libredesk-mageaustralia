@@ -45,7 +45,33 @@ func authenticateUser(r *fastglue.Request, app *App) (models.User, error) {
 	// Validate session and fetch user.
 	sessUser, err := app.auth.ValidateSession(r)
 	if err != nil || sessUser.ID <= 0 {
-		app.lo.Error("error validating session", "error", err)
+		// Diagnostic context — distinguishes between "no cookie sent" (user
+		// was never logged in / cookie expired client-side / cookie path
+		// mismatch) vs "cookie sent but session-store lookup failed"
+		// (Redis miss, expired TTL, signature mismatch). The previous log
+		// line just emitted `error=null` which gave no actionable signal.
+		sessCookie := r.RequestCtx.Request.Header.Cookie("libredesk_session")
+		cookiePresent := len(sessCookie) > 0
+		var reason string
+		switch {
+		case !cookiePresent:
+			reason = "missing_cookie"
+		case err != nil:
+			reason = "session_store_error"
+		case sessUser.ID <= 0:
+			reason = "empty_session"
+		default:
+			reason = "unknown"
+		}
+		app.lo.Error("error validating session",
+			"reason", reason,
+			"path", string(r.RequestCtx.Path()),
+			"method", method,
+			"cookie_present", cookiePresent,
+			"cookie_len", len(sessCookie),
+			"session_user_id", sessUser.ID,
+			"error", err,
+		)
 		return user, envelope.NewError(envelope.GeneralError, app.i18n.T("auth.invalidOrExpiredSession"), nil)
 	}
 

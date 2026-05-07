@@ -269,6 +269,8 @@ func handleTestEcommerceCustomerLookup(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Email is required", nil, envelope.InputError)
 	}
 
+	app.lo.Info("ecommerce test lookup request", "kind", "customer", "email", email)
+
 	if app.ecommerce == nil || !app.ecommerce.IsConfigured() {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Ecommerce not configured", nil, envelope.InputError)
 	}
@@ -289,6 +291,8 @@ func handleTestEcommerceOrderLookup(r *fastglue.Request) error {
 	if orderNumber == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Order number is required", nil, envelope.InputError)
 	}
+
+	app.lo.Info("ecommerce test lookup request", "kind", "order", "order_number", orderNumber)
 
 	if app.ecommerce == nil || !app.ecommerce.IsConfigured() {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Ecommerce not configured", nil, envelope.InputError)
