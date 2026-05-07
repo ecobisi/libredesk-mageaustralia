@@ -70,7 +70,7 @@ After triaging an entry into a `B##` row, optionally `DELETE /memory/{id}` to cl
 
 | ID  | Title | Effort | Deps | Status | Notes |
 |-----|-------|--------|------|--------|-------|
-| _(none currently)_ | | | | | |
+| B04 | Orphan localStorage drafts survive cross-session | S | – | pending | Historical orphan drafts (pre-2026-05) can persist in browser localStorage even after the conversations message was sent. Today the cleanup path is the Delete button (now reachable thanks to 0744f1b1) or browser DevTools. Add a guard in : if a localStorage draft is loaded, compare its plain-text against the conversations latest outgoing message plain-text — if similar (or older than ), discard rather than re-save to backend. Alternative: timestamp localStorage drafts () and discard any older than . |
 
 ## UX / Frontend
 
