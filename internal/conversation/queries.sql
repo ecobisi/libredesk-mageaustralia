@@ -983,22 +983,28 @@ LIMIT 1;
 
 -- name: auto-trash-old-resolved
 -- Aged from updated_at so a reopen-and-re-resolve resets the clock.
+-- RETURNING uuid lets the caller record per-conversation activity entries
+-- so the audit trail shows that the retention sweep trashed each one.
 UPDATE conversations SET
     status_id = (SELECT id FROM conversation_statuses WHERE name = 'Trashed'),
     trashed_at = NOW(),
     updated_at = NOW()
 WHERE status_id IN (SELECT id FROM conversation_statuses WHERE name IN ('Resolved', 'Closed'))
 AND updated_at < NOW() - INTERVAL '1 day' * $1
-AND trashed_at IS NULL;
+AND trashed_at IS NULL
+RETURNING uuid;
 
 -- name: auto-trash-old-spam
 -- Aged from created_at: spam doesn't earn a "fresh activity" clock reset.
+-- RETURNING uuid lets the caller record per-conversation activity entries
+-- so the audit trail shows that the retention sweep trashed each one.
 UPDATE conversations SET
     status_id = (SELECT id FROM conversation_statuses WHERE name = 'Trashed'),
     trashed_at = NOW(),
     updated_at = NOW()
 WHERE status_id = (SELECT id FROM conversation_statuses WHERE name = 'Spam')
-AND created_at < NOW() - INTERVAL '1 day' * $1;
+AND created_at < NOW() - INTERVAL '1 day' * $1
+RETURNING uuid;
 
 -- name: purge-old-trash-media
 -- Unlink media rows so the periodic media cleaner removes both the DB row AND
