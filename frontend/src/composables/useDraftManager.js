@@ -186,7 +186,10 @@ export function useDraftManager (key, uploadedFiles = null) {
       }
 
       htmlContent.value = content
-      textContent.value = ''
+      // Derive text content so reactive predicates (e.g. enableSend) don't
+      // wait for the editor's first onUpdate keystroke to mark the draft
+      // as having text.
+      textContent.value = getTextFromHTML(content)
       loadedAttachments.value = validateAttachments(meta.attachments)
       loadedMacroActions.value = validateMacroActions(meta.macro_actions)
     } catch (error) {
