@@ -126,13 +126,13 @@ describe('computeRecipientsFromMessage', () => {
     })
 
     describe('incoming message handling', () => {
-        test('sets from as to field for incoming', () => {
+        test('sets from as to field for incoming when from matches contact', () => {
             const message = {
                 type: 'incoming',
-                meta: { from: ['sender@example.com'] }
+                meta: { from: ['customer@example.com'] }
             }
             const result = computeRecipientsFromMessage(message, contactEmail, inboxEmail)
-            expect(result.to).toEqual(['sender@example.com'])
+            expect(result.to).toEqual(['customer@example.com'])
         })
 
         test('falls back to contactEmail when no from', () => {
@@ -143,16 +143,36 @@ describe('computeRecipientsFromMessage', () => {
             const result = computeRecipientsFromMessage(message, contactEmail, inboxEmail)
             expect(result.to).toEqual([contactEmail])
         })
+
+        test('substitutes contactEmail when from does not match (UX18 contact swap)', () => {
+            // After a mid-thread contact swap, meta.from still references the
+            // old sender; the current contact should win.
+            const message = {
+                type: 'incoming',
+                meta: { from: ['old-sender@example.com'] }
+            }
+            const result = computeRecipientsFromMessage(message, contactEmail, inboxEmail)
+            expect(result.to).toEqual([contactEmail])
+        })
     })
 
     describe('outgoing message handling', () => {
-        test('preserves to field for outgoing', () => {
+        test('preserves to field for outgoing when it matches contact', () => {
             const message = {
                 type: 'outgoing',
-                meta: { to: ['recipient@example.com'] }
+                meta: { to: ['customer@example.com'] }
             }
             const result = computeRecipientsFromMessage(message, contactEmail, inboxEmail)
-            expect(result.to).toEqual(['recipient@example.com'])
+            expect(result.to).toEqual(['customer@example.com'])
+        })
+
+        test('substitutes contactEmail when to does not match (UX18 contact swap)', () => {
+            const message = {
+                type: 'outgoing',
+                meta: { to: ['old-recipient@example.com'] }
+            }
+            const result = computeRecipientsFromMessage(message, contactEmail, inboxEmail)
+            expect(result.to).toEqual([contactEmail])
         })
     })
 })
