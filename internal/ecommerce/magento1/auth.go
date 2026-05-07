@@ -62,7 +62,7 @@ func (a *authClient) refreshToken() (string, error) {
 	}
 	body, _ := json.Marshal(payload)
 
-	tokenURL := a.baseURL + "/api/auth/token"
+	tokenURL := a.baseURL + "/api/rest/v2/auth/token"
 	log.Printf("[ecommerce] Requesting token from: %s", tokenURL)
 	
 	resp, err := http.Post(tokenURL, "application/json", bytes.NewBuffer(body))

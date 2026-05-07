@@ -98,7 +98,7 @@ func unwrapCollection(body []byte) (json.RawMessage, error) {
 
 // GetCustomerByEmail looks up a customer by email address
 func (c *Client) GetCustomerByEmail(ctx context.Context, email string) (*ecommerce.Customer, error) {
-	body, status, err := c.doRequest(ctx, "/api/customers", url.Values{"email": {email}})
+	body, status, err := c.doRequest(ctx, "/api/rest/v2/customers", url.Values{"email": {email}})
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (c *Client) GetCustomerByEmail(ctx context.Context, email string) (*ecommer
 // GetOrdersByEmail returns recent orders for an email address
 func (c *Client) GetOrdersByEmail(ctx context.Context, email string, limit int) ([]ecommerce.Order, error) {
 	params := url.Values{"email": {email}, "itemsPerPage": {fmt.Sprintf("%d", limit)}}
-	body, status, err := c.doRequest(ctx, "/api/orders", params)
+	body, status, err := c.doRequest(ctx, "/api/rest/v2/orders", params)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (c *Client) GetOrdersByEmail(ctx context.Context, email string, limit int) 
 
 // GetOrderByNumber looks up an order by its display number (increment_id)
 func (c *Client) GetOrderByNumber(ctx context.Context, orderNumber string) (*ecommerce.Order, error) {
-	body, status, err := c.doRequest(ctx, "/api/orders", url.Values{"incrementId": {orderNumber}})
+	body, status, err := c.doRequest(ctx, "/api/rest/v2/orders", url.Values{"incrementId": {orderNumber}})
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +184,7 @@ func (c *Client) GetOrderByNumber(ctx context.Context, orderNumber string) (*eco
 
 // GetOrderByID looks up an order by internal ID
 func (c *Client) GetOrderByID(ctx context.Context, orderID string) (*ecommerce.Order, error) {
-	body, status, err := c.doRequest(ctx, "/api/orders/"+orderID, nil)
+	body, status, err := c.doRequest(ctx, "/api/rest/v2/orders/"+orderID, nil)
 	if err != nil {
 		return nil, err
 	}
