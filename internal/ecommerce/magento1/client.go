@@ -22,15 +22,23 @@ type Client struct {
 	http    *http.Client
 }
 
-// New creates a new Maho Commerce client
+// New creates a new Maho Commerce client.
+//
+// NOTE: Maho's API Platform v2 uses a JWT auth flow that takes {email,
+// password} rather than the legacy OAuth2 client_credentials grant. To avoid a
+// DB schema change, the existing ProviderConfig.ClientID and ClientSecret
+// fields are repurposed semantically here: ClientID carries the admin email,
+// ClientSecret carries the password (still encrypted at rest by the existing
+// settings layer).
 func New(config ecommerce.ProviderConfig) (*Client, error) {
 	if config.BaseURL == "" || config.ClientID == "" || config.ClientSecret == "" {
-		return nil, fmt.Errorf("magento1: baseURL, clientID, and clientSecret are required")
+		return nil, fmt.Errorf("magento1: baseURL, email (client_id), and password (client_secret) are required")
 	}
 	return &Client{
 		baseURL: config.BaseURL,
-		auth:    newAuthClient(config.BaseURL, config.ClientID, config.ClientSecret),
-		http:    &http.Client{Timeout: 60 * time.Second},
+		// ClientID -> email, ClientSecret -> password (see note above).
+		auth: newAuthClient(config.BaseURL, config.ClientID, config.ClientSecret),
+		http: &http.Client{Timeout: 60 * time.Second},
 	}, nil
 }
 

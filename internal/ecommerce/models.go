@@ -83,11 +83,16 @@ type EcommerceContext struct {
 	Warnings      []string  `json:"warnings,omitempty"`
 }
 
-// ProviderConfig contains the configuration for an ecommerce provider
+// ProviderConfig contains the configuration for an ecommerce provider.
+//
+// For the magento1 provider this carries email and password respectively
+// (Maho v2 JWT auth) — the field names ClientID/ClientSecret are kept to avoid
+// a DB schema change. The encryption-at-rest behaviour of ClientSecret is
+// exactly what we want for the password.
 type ProviderConfig struct {
 	Type         string            `json:"type"`          // "magento1", "magento2", "shopify"
 	BaseURL      string            `json:"base_url"`
-	ClientID     string            `json:"client_id"`
-	ClientSecret string            `json:"client_secret"` // Encrypted in database
+	ClientID     string            `json:"client_id"`     // magento1: admin email
+	ClientSecret string            `json:"client_secret"` // Encrypted in database. magento1: admin password
 	ExtraConfig  map[string]string `json:"extra_config"`  // Provider-specific settings
 }
