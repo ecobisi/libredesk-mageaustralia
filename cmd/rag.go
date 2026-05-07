@@ -307,8 +307,9 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 
 	// Gather ecommerce context if requested and configured
 	var ecommerceContext string
+	var ecommerceWarnings []string
 	if req.IncludeEcommerce && req.ConversationID > 0 && app.ecommerce != nil && app.ecommerce.IsConfigured() {
-		ecommerceContext = app.gatherEcommerceContext(r.RequestCtx, req.ConversationID)
+		ecommerceContext, ecommerceWarnings = app.gatherEcommerceContext(r.RequestCtx, req.ConversationID)
 	}
 
 	app.lo.Info("TIMING ecommerce", "elapsed_ms", time.Since(timerStart).Milliseconds())
@@ -443,25 +444,28 @@ Today is {{today}}.
 	}
 
 	return r.SendEnvelope(map[string]interface{}{
-		"response": response,
-		"sources":  results,
+		"response":           response,
+		"sources":            results,
+		"ecommerce_warnings": ecommerceWarnings,
 	})
 }
 
-// gatherEcommerceContext retrieves ecommerce data for the conversation's contact
-func (app *App) gatherEcommerceContext(ctx context.Context, conversationID int) string {
+// gatherEcommerceContext retrieves ecommerce data for the conversation's contact.
+// Returns the formatted prompt fragment plus any user-visible warnings (e.g. auth
+// failures) so the agent UI can surface them.
+func (app *App) gatherEcommerceContext(ctx context.Context, conversationID int) (string, []string) {
 	// Get conversation UUID from ID
 	uuid, err := app.conversation.GetConversationUUID(conversationID)
 	if err != nil {
 		app.lo.Warn("failed to get conversation UUID for ecommerce context", "conversation_id", conversationID, "error", err)
-		return ""
+		return "", nil
 	}
 
 	// Get conversation with contact info
 	conv, err := app.conversation.GetConversation(conversationID, uuid, "")
 	if err != nil {
 		app.lo.Warn("failed to get conversation for ecommerce context", "conversation_id", conversationID, "error", err)
-		return ""
+		return "", nil
 	}
 
 	// Get customer email from contact
@@ -471,7 +475,7 @@ func (app *App) gatherEcommerceContext(ctx context.Context, conversationID int) 
 	}
 	if customerEmail == "" {
 		app.lo.Debug("no email for ecommerce context", "conversation_id", conversationID)
-		return ""
+		return "", nil
 	}
 
 	// Get conversation messages for order number scanning
@@ -499,7 +503,7 @@ func (app *App) gatherEcommerceContext(ctx context.Context, conversationID int) 
 	eCtx, err := app.ecommerce.GatherFullContext(ctx, customerEmail, messageTexts, 5)
 	if err != nil {
 		app.lo.Warn("failed to gather ecommerce context", "email", customerEmail, "error", err)
-		return ""
+		return "", nil
 	}
 
 	// Format for AI prompt
@@ -508,7 +512,7 @@ func (app *App) gatherEcommerceContext(ctx context.Context, conversationID int) 
 		app.lo.Info("ecommerce context added to prompt", "email", customerEmail, "length", len(formatted))
 	}
 
-	return formatted
+	return formatted, eCtx.Warnings
 }
 
 // classifySearchIntent uses the AI to classify a customer message into search intents.

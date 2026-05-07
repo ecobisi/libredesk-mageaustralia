@@ -40,6 +40,7 @@ func (m *Manager) GatherFullContext(ctx context.Context, email string, messages 
 	customer, err := m.provider.GetCustomerByEmail(ctx, email)
 	if err != nil && err != ErrNotFound {
 		m.lo.Warn("failed to get customer", "email", email, "error", err)
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Customer lookup failed: %v", err))
 	} else if err == nil {
 		result.Customer = customer
 	}
@@ -47,6 +48,7 @@ func (m *Manager) GatherFullContext(ctx context.Context, email string, messages 
 	orders, err := m.provider.GetOrdersByEmail(ctx, email, maxOrders)
 	if err != nil && err != ErrNotFound {
 		m.lo.Warn("failed to get orders", "email", email, "error", err)
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Recent orders lookup failed: %v", err))
 	} else {
 		result.RecentOrders = orders
 	}
@@ -99,7 +101,21 @@ func (m *Manager) GatherFullContext(ctx context.Context, email string, messages 
 			m.lo.Debug("found order in conversation", "order_number", orderNum)
 		} else if err != ErrNotFound {
 			m.lo.Warn("failed to lookup order", "order_number", orderNum, "error", err)
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Order #%s lookup failed: %v", orderNum, err))
 		}
+	}
+
+	// Deduplicate warnings — same auth/network failure cascades across stages
+	if len(result.Warnings) > 0 {
+		seen := make(map[string]bool, len(result.Warnings))
+		deduped := result.Warnings[:0]
+		for _, w := range result.Warnings {
+			if !seen[w] {
+				seen[w] = true
+				deduped = append(deduped, w)
+			}
+		}
+		result.Warnings = deduped
 	}
 
 	return result, nil

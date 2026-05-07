@@ -850,6 +850,16 @@ const handleGenerateResponse = async (includeEcommerce = false) => {
       emitter.emit(EMITTER_EVENTS.SHOW_TOAST, {
         description: successMsg
       })
+
+      const warnings = resp.data?.data?.ecommerce_warnings
+      if (Array.isArray(warnings) && warnings.length > 0) {
+        for (const w of warnings) {
+          emitter.emit(EMITTER_EVENTS.SHOW_TOAST, {
+            variant: "destructive",
+            description: "Ecommerce: " + w
+          })
+        }
+      }
     }
   } catch (error) {
     if (error.response?.status === 400 && userStore.can("ai:manage")) {

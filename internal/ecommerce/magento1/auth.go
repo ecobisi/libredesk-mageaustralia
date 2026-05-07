@@ -73,7 +73,7 @@ func (a *authClient) refreshToken() (string, error) {
 
 	respBody, _ := io.ReadAll(resp.Body)
 	
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		bodyStr := string(respBody)
 		if len(bodyStr) > 200 {
 			bodyStr = bodyStr[:200] + "..."

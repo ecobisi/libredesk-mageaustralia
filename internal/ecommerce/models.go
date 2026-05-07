@@ -80,6 +80,7 @@ type EcommerceContext struct {
 	Customer      *Customer `json:"customer,omitempty"`
 	RecentOrders  []Order   `json:"recent_orders,omitempty"`
 	MatchedOrders []*Order  `json:"matched_orders,omitempty"` // Orders mentioned in conversation
+	Warnings      []string  `json:"warnings,omitempty"`
 }
 
 // ProviderConfig contains the configuration for an ecommerce provider
