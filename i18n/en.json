@@ -1242,6 +1242,7 @@
   "user.accountDisabled": "Your account is disabled, Please contact administrator",
   "user.cannotDeleteSystemUser": "Cannot delete system user",
   "user.invalidEmailPassword": "Invalid email or password.",
+  "user.invalidPushPlatform": "Push token platform must be 'android' or 'ios'",
   "user.resetPasswordTokenExpired": "Token is invalid or expired, Please try again by requesting a new password reset link",
   "user.sameEmailAlreadyExists": "User with same email already exists",
   "user.userAlreadyLoggedIn": "User already logged in",

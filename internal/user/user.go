@@ -101,6 +101,11 @@ type queries struct {
 	RevokeAPIKey         *sqlx.Stmt `query:"revoke-api-key"`
 	UpdateAPIKeyLastUsed *sqlx.Stmt `query:"update-api-key-last-used"`
 
+	// Mobile push token queries (T3ab) — backing storage for the FCM
+	// dispatcher landing in T3ad.
+	RegisterPushToken   *sqlx.Stmt `query:"register-push-token"`
+	UnregisterPushToken *sqlx.Stmt `query:"unregister-push-token"`
+
 	MergeVisitorToContact *sqlx.Stmt `query:"merge-visitor-to-contact"`
 }
 
@@ -443,6 +448,27 @@ func (u *Manager) ValidateAPIKey(apiKey, apiSecret string) (models.User, error) 
 func (u *Manager) RevokeAPIKey(userID int) error {
 	if _, err := u.q.RevokeAPIKey.Exec(userID); err != nil {
 		u.lo.Error("error revoking API key", "error", err, "user_id", userID)
+		return envelope.NewError(envelope.GeneralError, u.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	return nil
+}
+
+// RegisterPushToken upserts an FCM push token for the given agent. Platform
+// validation (android | ios) lives in the handler; the DB CHECK constraint
+// is the belt to that suspenders.
+func (u *Manager) RegisterPushToken(userID int, token, platform string) error {
+	if _, err := u.q.RegisterPushToken.Exec(userID, token, platform); err != nil {
+		u.lo.Error("error registering push token", "error", err, "user_id", userID)
+		return envelope.NewError(envelope.GeneralError, u.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	return nil
+}
+
+// UnregisterPushToken removes a (user, token) pair on logout / app uninstall.
+// Best-effort: a missing row is not an error from the caller's perspective.
+func (u *Manager) UnregisterPushToken(userID int, token string) error {
+	if _, err := u.q.UnregisterPushToken.Exec(userID, token); err != nil {
+		u.lo.Error("error unregistering push token", "error", err, "user_id", userID)
 		return envelope.NewError(envelope.GeneralError, u.i18n.T("globals.messages.somethingWentWrong"), nil)
 	}
 	return nil

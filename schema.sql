@@ -726,6 +726,18 @@ CREATE INDEX index_user_notifications_on_user_id_is_read ON user_notifications(u
 CREATE INDEX index_user_notifications_on_created_at ON user_notifications(created_at);
 CREATE INDEX index_user_notifications_on_conversation_id ON user_notifications(conversation_id);
 
+DROP TABLE IF EXISTS user_push_tokens CASCADE;
+CREATE TABLE user_push_tokens (
+	id         SERIAL PRIMARY KEY,
+	user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	token      TEXT NOT NULL,
+	platform   TEXT NOT NULL CHECK (platform IN ('android', 'ios')),
+	created_at TIMESTAMPTZ DEFAULT NOW(),
+	updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX user_push_tokens_user_id_token_key ON user_push_tokens (user_id, token);
+CREATE INDEX index_user_push_tokens_on_user_id ON user_push_tokens (user_id);
+
 INSERT INTO ai_providers
 ("name", provider, config, is_default)
 VALUES('openai', 'openai', '{"api_key": ""}'::jsonb, true);

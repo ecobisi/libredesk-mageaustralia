@@ -171,6 +171,9 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.GET("/api/v1/agents/me/teams", auth(handleGetCurrentAgentTeams))
 	g.PUT("/api/v1/agents/me/availability", auth(handleUpdateAgentAvailability))
 	g.DELETE("/api/v1/agents/me/avatar", auth(handleDeleteCurrentAgentAvatar))
+	// Mobile push tokens (T3ab) — FCM device token register / unregister.
+	g.POST("/api/v1/agents/me/push-token", auth(handleRegisterPushToken))
+	g.DELETE("/api/v1/agents/me/push-token", auth(handleUnregisterPushToken))
 
 	g.GET("/api/v1/agents/compact", auth(handleGetAgentsCompact))
 	g.GET("/api/v1/agents", perm(handleGetAgents, "users:manage"))

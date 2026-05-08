@@ -329,9 +329,20 @@ SET api_key = NULL, api_secret = NULL, api_key_last_used_at = NULL, updated_at =
 WHERE id = $1;
 
 -- name: update-api-key-last-used
-UPDATE users 
+UPDATE users
 SET api_key_last_used_at = now()
 WHERE id = $1;
+
+-- name: register-push-token
+-- Upserts the (user, token) pair so a device re-registering after token
+-- rotation just bumps the platform + updated_at without duplicating rows.
+INSERT INTO user_push_tokens (user_id, token, platform, created_at, updated_at)
+VALUES ($1, $2, $3, NOW(), NOW())
+ON CONFLICT (user_id, token)
+DO UPDATE SET platform = EXCLUDED.platform, updated_at = NOW();
+
+-- name: unregister-push-token
+DELETE FROM user_push_tokens WHERE user_id = $1 AND token = $2;
 
 -- name: get-user-by-external-id
 SELECT
