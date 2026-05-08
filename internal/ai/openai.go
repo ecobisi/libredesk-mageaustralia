@@ -22,7 +22,12 @@ func NewOpenAIClient(apiKey string, lo *logf.Logger) *OpenAIClient {
 	return &OpenAIClient{
 		apikey: apiKey,
 		lo:     lo,
-		client: &http.Client{Timeout: 10 * time.Second},
+		// 60s budget covers RAG completions where assembled prompts
+		// (knowledge base context + macros + customer message) push
+		// the model well past the prior 10s ceiling — large prompts
+		// with retrieved context were timing out at 10s under normal
+		// OpenAI load (T3f, mirrors v1.0.3 d7d34fb6).
+		client: &http.Client{Timeout: 60 * time.Second},
 	}
 }
 

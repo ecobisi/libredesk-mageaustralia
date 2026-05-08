@@ -520,7 +520,11 @@ const updateRAGSource = (id, data) => http.put(`/api/v1/rag/sources/${id}`, data
 const deleteRAGSource = (id) => http.delete(`/api/v1/rag/sources/${id}`)
 const syncRAGSource = (id) => http.post(`/api/v1/rag/sources/${id}/sync`)
 const ragSearch = (data) => http.post('/api/v1/rag/search', data)
-const ragGenerate = (data) => http.post('/api/v1/rag/generate', data)
+// 60s explicit timeout — RAG generation involves an embedding round-
+// trip + a chat completion against the configured LLM, both of which
+// can exceed the 10s default for large prompts. Matches the backend
+// OpenAI client budget (T3f, mirrors v1.0.3 d986a684).
+const ragGenerate = (data) => http.post('/api/v1/rag/generate', data, { timeout: 60000 })
 const ragFileUpload = (formData) =>
   http.post('/api/v1/rag/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }

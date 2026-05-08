@@ -205,6 +205,21 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.empty", "name", "customer_message"), nil, envelope.InputError)
 	}
 
+	// Cap conversation context to bound prompt size, AI provider
+	// timeouts, and token cost on long email threads or adversarial
+	// input. The frontend ALSO limits to the last 10 messages — this
+	// is the server-side ceiling regardless of caller. Truncation
+	// keeps the tail (most recent) so the customer's latest question
+	// is preserved; older context is replaced with a marker so the
+	// LLM knows the message was clipped (T3f, mirrors v1.0.3
+	// d986a684).
+	const maxCustomerMessageLen = 6000
+	if len(req.CustomerMessage) > maxCustomerMessageLen {
+		original := len(req.CustomerMessage)
+		req.CustomerMessage = "[Earlier messages truncated]\n\n" + req.CustomerMessage[original-maxCustomerMessageLen:]
+		app.lo.Info("RAG generate: truncated customer message", "original_len", original, "truncated_to", len(req.CustomerMessage))
+	}
+
 	aiSettings, err := app.setting.GetAISettings()
 	if err != nil {
 		return sendErrorEnvelope(r, err)

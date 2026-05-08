@@ -447,9 +447,15 @@ const handleAiPromptSelected = async (key) => {
 const handleGenerateResponse = async () => {
   isGenerating.value = true
   try {
+    // Limit to the last 10 messages to bound prompt size — the
+    // backend also caps the assembled customer_message to 6000 chars
+    // (T3f), but trimming on the client side keeps the transcript
+    // semantically coherent (whole messages, oldest-first ordering)
+    // rather than relying on a mid-message truncation server-side.
     const messages = (conversationStore.conversationMessages || [])
       .filter((m) => !m.private && m.content)
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      .slice(-10)
 
     if (!messages.length) {
       toast.error(t('replyBox.generateNoMessages'))
