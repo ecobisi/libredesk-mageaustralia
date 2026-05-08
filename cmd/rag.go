@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/abhinavxd/libredesk/internal/envelope"
 	"github.com/abhinavxd/libredesk/internal/rag/models"
@@ -165,6 +167,8 @@ func handleRAGSearch(r *fastglue.Request) error {
 // at the {{enquiry}} site.
 const defaultRAGSystemPrompt = `You are a helpful customer support assistant for {{site_name}}. Use the following knowledge base content to answer questions accurately.
 
+Today is {{today}}.
+
 Knowledge Base Context:
 {{context}}
 
@@ -259,6 +263,15 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 	if systemPrompt == "" {
 		systemPrompt = defaultRAGSystemPrompt
 	}
+	// Inject current date (AEST) so the LLM knows what "today" and
+	// "recently" mean — prevents stale date references in responses
+	// and lets the conversation timestamps (T3g frontend hunk) be
+	// reasoned about relative to a fixed anchor. AEST chosen to match
+	// v1.0.3 source; if other deployments need a different zone the
+	// substitution site is the place to extend (T3g, mirrors v1.0.3
+	// 30b5194c).
+	now := time.Now().In(time.FixedZone("AEST", 10*60*60))
+	systemPrompt = strings.ReplaceAll(systemPrompt, "{{today}}", fmt.Sprintf("%s %d %s %d", now.Weekday(), now.Day(), now.Month(), now.Year()))
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{{site_name}}", ko.String("app.site_name"))
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{{context}}", contextStr)
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{{macros}}", macrosStr)

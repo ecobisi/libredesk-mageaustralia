@@ -447,33 +447,81 @@ const handleAiPromptSelected = async (key) => {
 const handleGenerateResponse = async () => {
   isGenerating.value = true
   try {
-    // Limit to the last 10 messages to bound prompt size — the
-    // backend also caps the assembled customer_message to 6000 chars
-    // (T3f), but trimming on the client side keeps the transcript
-    // semantically coherent (whole messages, oldest-first ordering)
-    // rather than relying on a mid-message truncation server-side.
-    const messages = (conversationStore.conversationMessages || [])
-      .filter((m) => !m.private && m.content)
+    // Limit to bound prompt size — the backend also caps the
+    // assembled customer_message to 6000 chars (T3f), but trimming
+    // on the client side keeps the transcript semantically coherent
+    // (whole messages, oldest-first ordering) rather than relying
+    // on a mid-message truncation server-side. Public messages
+    // capped at 7, private/internal notes at 5 (T3g, mirrors
+    // v1.0.3 30b5194c).
+    const allMessages = (conversationStore.conversationMessages || [])
+      .filter((m) => m.content)
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-      .slice(-10)
 
-    if (!messages.length) {
+    // Public messages for conversation thread (oldest-first so the
+    // AI sees chronology).
+    const publicMessages = allMessages.filter((m) => !m.private).slice(-7)
+
+    // Private/internal notes — shown to AI as internal context only,
+    // never echoed back to the customer (the LLM is told this in the
+    // appended block).
+    const privateNotes = allMessages.filter((m) => m.private).slice(-5)
+
+    if (!publicMessages.length) {
       toast.error(t('replyBox.generateNoMessages'))
       return
+    }
+
+    // Format dates inline with each message so the LLM can reason
+    // about recency (a Feb message vs an April message vs today)
+    // instead of treating all messages as equally fresh. Locale
+    // 'en-AU' chosen to match the AEST anchor in the backend
+    // {{today}} substitution.
+    const formatDate = (iso) => {
+      try {
+        return new Date(iso).toLocaleString('en-AU', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      } catch {
+        return ''
+      }
     }
 
     // Strip HTML — the AI prompt eats raw text more efficiently
     // and we don't need markup at the LLM input layer. Use DOMParser
     // rather than `innerHTML` assignment so the parsed-but-never-mounted
     // document doesn't fire resource-loading side-effects.
-    const conversationText = messages
-      .map((m) => {
+    const conversationText = publicMessages
+      .map((m, idx) => {
         const doc = new DOMParser().parseFromString(m.content || '', 'text/html')
         const text = doc.body.textContent || ''
         const role = m.type === 'incoming' ? 'Customer' : 'Agent'
-        return `${role}: ${text.trim()}`
+        const date = formatDate(m.created_at)
+        const isLatest =
+          idx === publicMessages.length - 1 ? ' [MOST RECENT MESSAGE — respond to this]' : ''
+        return `[${date}] ${role}${isLatest}: ${text.trim()}`
       })
       .join('\n\n')
+
+    // Append private/internal notes as a separate, clearly-labelled
+    // context block — the LLM is instructed they're not visible to
+    // the customer so it uses them for tone/content guidance only.
+    let internalNotes = ''
+    if (privateNotes.length > 0) {
+      internalNotes =
+        '\n\n---\nINTERNAL AGENT NOTES (not visible to customer — use to inform your tone and response):\n'
+      internalNotes += privateNotes
+        .map((m) => {
+          const doc = new DOMParser().parseFromString(m.content || '', 'text/html')
+          const text = doc.body.textContent || ''
+          return `[${formatDate(m.created_at)}] ${text.trim()}`
+        })
+        .join('\n\n')
+    }
 
     if (!conversationText.trim()) {
       toast.error(t('replyBox.generateEmpty'))
@@ -482,7 +530,7 @@ const handleGenerateResponse = async () => {
 
     const resp = await api.ragGenerate({
       conversation_id: conversationStore.current?.id,
-      customer_message: conversationText
+      customer_message: conversationText + internalNotes
     })
 
     const response = resp.data?.data?.response
