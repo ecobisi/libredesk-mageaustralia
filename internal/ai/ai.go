@@ -41,11 +41,15 @@ type Opts struct {
 
 // queries contains prepared SQL queries.
 type queries struct {
-	GetDefaultProvider *sqlx.Stmt `query:"get-default-provider"`
-	GetPrompt          *sqlx.Stmt `query:"get-prompt"`
-	GetPrompts         *sqlx.Stmt `query:"get-prompts"`
-	SetOpenAIKey       *sqlx.Stmt `query:"set-openai-key"`
-	GetProvider        *sqlx.Stmt `query:"get-provider"`
+	GetDefaultProvider  *sqlx.Stmt `query:"get-default-provider"`
+	GetPrompt           *sqlx.Stmt `query:"get-prompt"`
+	GetPrompts          *sqlx.Stmt `query:"get-prompts"`
+	SetOpenAIKey        *sqlx.Stmt `query:"set-openai-key"`
+	GetProvider         *sqlx.Stmt `query:"get-provider"`
+	GetProviders        *sqlx.Stmt `query:"get-providers"`
+	SetDefaultProvider  *sqlx.Stmt `query:"set-default-provider"`
+	UpsertOpenRouter    *sqlx.Stmt `query:"upsert-openrouter"`
+	SetOpenRouterConfig *sqlx.Stmt `query:"set-openrouter-config"`
 }
 
 // New creates and returns a new instance of the Manager.
@@ -107,15 +111,157 @@ func (m *Manager) GetPrompts() ([]models.Prompt, error) {
 	return prompts, nil
 }
 
-// UpdateProvider updates a provider.
-func (m *Manager) UpdateProvider(provider, apiKey string) error {
+// GetProviders returns information about all configured providers for the
+// admin UI. The api_key itself never leaves the server — the frontend gets
+// only the boolean has_api_key + the (non-secret) model selection.
+func (m *Manager) GetProviders() ([]ProviderInfo, error) {
+	var providers = make([]models.Provider, 0)
+	if err := m.q.GetProviders.Select(&providers); err != nil {
+		m.lo.Error("error fetching providers", "error", err)
+		return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+
+	result := make([]ProviderInfo, 0, len(providers))
+	for _, p := range providers {
+		info := ProviderInfo{
+			Provider:  p.Provider,
+			Name:      p.Name,
+			IsDefault: p.IsDefault,
+		}
+		var config map[string]interface{}
+		if err := json.Unmarshal([]byte(p.Config), &config); err == nil {
+			if apiKey, ok := config["api_key"].(string); ok && apiKey != "" {
+				info.HasAPIKey = true
+			}
+			if model, ok := config["model"].(string); ok {
+				info.Model = model
+			}
+		}
+		result = append(result, info)
+	}
+	return result, nil
+}
+
+// GetAvailableModels returns a curated list of OpenRouter models for the
+// AISettings dropdown. Errors are swallowed at the lower level (network
+// failure → fallback list), so callers always get something.
+func (m *Manager) GetAvailableModels() []string {
+	models, _ := FetchOpenRouterModels()
+	return models
+}
+
+// UpdateProvider updates a provider's stored config.
+//
+// For OpenAI: only apiKey is consumed (model is fixed at gpt-4o-mini).
+// For OpenRouter: both apiKey and model are persisted; an empty apiKey
+// preserves the existing one so admins can change models without
+// re-entering the key.
+func (m *Manager) UpdateProvider(provider, apiKey, model string) error {
 	switch ProviderType(provider) {
 	case ProviderOpenAI:
 		return m.setOpenAIAPIKey(apiKey)
+	case ProviderOpenRouter:
+		return m.setOpenRouterConfig(apiKey, model)
 	default:
 		m.lo.Error("unsupported provider type", "provider", provider)
 		return envelope.NewError(envelope.GeneralError, m.i18n.T("validation.invalidProvider"), nil)
 	}
+}
+
+// SetDefaultProvider marks the named provider as the default and clears
+// the flag on the others. The partial unique index on is_default makes
+// the multi-row UPDATE atomic without a wrapper transaction.
+func (m *Manager) SetDefaultProvider(provider string) error {
+	if _, err := m.q.SetDefaultProvider.Exec(provider); err != nil {
+		m.lo.Error("error setting default provider", "error", err)
+		return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	return nil
+}
+
+// TestProvider sends a tiny prompt through the named provider and
+// returns whether the round-trip worked. Used by the AISettings "Test
+// Connection" button.
+//
+// If apiKey is empty, the saved key is loaded from the database — lets
+// the admin test an existing config without re-typing the (potentially
+// long) key.
+func (m *Manager) TestProvider(provider, apiKey, model string) error {
+	if apiKey == "" {
+		savedKey, savedModel := m.getSavedAPIKey(provider)
+		apiKey = savedKey
+		if model == "" {
+			model = savedModel
+		}
+	}
+
+	var client ProviderClient
+	switch ProviderType(provider) {
+	case ProviderOpenAI:
+		client = NewOpenAIClient(apiKey, m.lo)
+	case ProviderOpenRouter:
+		client = NewOpenRouterClient(apiKey, model, m.lo)
+	default:
+		return envelope.NewError(envelope.InputError, m.i18n.T("validation.invalidProvider"), nil)
+	}
+
+	_, err := client.SendPrompt(PromptPayload{
+		SystemPrompt: "You are a helpful assistant.",
+		UserPrompt:   "Say OK to confirm the connection works.",
+	})
+	if err != nil {
+		if errors.Is(err, ErrInvalidAPIKey) {
+			return envelope.NewError(envelope.InputError, m.i18n.Ts("globals.messages.invalid", "name", "API Key"), nil)
+		}
+		if errors.Is(err, ErrApiKeyNotSet) {
+			return envelope.NewError(envelope.InputError, m.i18n.Ts("ai.apiKeyNotSet", "provider", provider), nil)
+		}
+		return envelope.NewError(envelope.GeneralError, err.Error(), nil)
+	}
+	return nil
+}
+
+// getSavedAPIKey reads the currently-stored api_key + model for a
+// provider from ai_providers. Used by TestProvider when the admin doesn't
+// re-enter the key in the form. Returns ("", "") on any error — TestProvider
+// then falls through to ErrApiKeyNotSet which the caller surfaces cleanly.
+//
+// For OpenAI the stored api_key is encrypted; decryption happens here so
+// the test reflects what a real call would see. OpenRouter is plaintext
+// for now (T3j moves it to encrypted-at-rest).
+func (m *Manager) getSavedAPIKey(provider string) (string, string) {
+	rows, err := m.q.GetProviders.Queryx()
+	if err != nil {
+		return "", ""
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p models.Provider
+		if err := rows.StructScan(&p); err != nil {
+			continue
+		}
+		if p.Provider != provider {
+			continue
+		}
+		var config map[string]interface{}
+		if err := json.Unmarshal([]byte(p.Config), &config); err != nil {
+			return "", ""
+		}
+		apiKey, _ := config["api_key"].(string)
+		model, _ := config["model"].(string)
+		// OpenAI is encrypted at rest; decrypt before handing back.
+		// OpenRouter is plaintext until T3j.
+		if ProviderType(provider) == ProviderOpenAI && apiKey != "" {
+			if dec, err := crypto.Decrypt(apiKey, m.encryptionKey); err == nil {
+				apiKey = dec
+			} else {
+				return "", ""
+			}
+		}
+		return apiKey, model
+	}
+	return "", ""
 }
 
 // setOpenAIAPIKey sets the OpenAI API key in the database.
@@ -129,6 +275,33 @@ func (m *Manager) setOpenAIAPIKey(apiKey string) error {
 
 	if _, err := m.q.SetOpenAIKey.Exec(encryptedKey); err != nil {
 		m.lo.Error("error setting OpenAI API key", "error", err)
+		return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	return nil
+}
+
+// setOpenRouterConfig persists OpenRouter's API key + model selection.
+//
+// Two-step write because schema.sql + the v2.2.16 migration both seed an
+// OpenRouter row, but extra-cautious idempotency: UpsertOpenRouter is a
+// no-op when the row exists, then SetOpenRouterConfig actually writes
+// the values. An empty apiKey preserves whatever's already stored — lets
+// admins change just the model from the UI.
+//
+// API key is stored plaintext until T3j adds encryption-at-rest (mirroring
+// the existing OpenAI encryption path).
+func (m *Manager) setOpenRouterConfig(apiKey, model string) error {
+	if model == "" {
+		model = defaultOpenRouterModel
+	}
+
+	if _, err := m.q.UpsertOpenRouter.Exec(); err != nil {
+		m.lo.Error("error upserting OpenRouter provider", "error", err)
+		return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+
+	if _, err := m.q.SetOpenRouterConfig.Exec(apiKey, model); err != nil {
+		m.lo.Error("error setting OpenRouter config", "error", err)
 		return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 	}
 	return nil
@@ -279,6 +452,20 @@ func (m *Manager) getDefaultProviderClient() (ProviderClient, error) {
 			return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 		}
 		return NewOpenAIClient(decryptedKey, m.lo), nil
+	case ProviderOpenRouter:
+		config := struct {
+			APIKey string `json:"api_key"`
+			Model  string `json:"model"`
+		}{}
+		if err := json.Unmarshal([]byte(p.Config), &config); err != nil {
+			m.lo.Error("error parsing provider config", "error", err)
+			return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+		}
+		// API key is stored plaintext for now — T3j adds encryption.
+		// An empty key isn't fatal here: the client returns
+		// ErrApiKeyNotSet on first SendPrompt which the manager
+		// surfaces as a clean "configure AI in settings" error.
+		return NewOpenRouterClient(config.APIKey, config.Model, m.lo), nil
 	default:
 		m.lo.Error("unsupported provider type", "provider", p.Provider)
 		return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("validation.invalidProvider"), nil)

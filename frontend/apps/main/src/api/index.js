@@ -511,6 +511,20 @@ const updateAIProvider = (data) => http.put('/api/v1/ai/provider', data, {
     'Content-Type': 'application/json'
   }
 })
+// T3b: provider management surface for the AISettings page.
+const getAIProviders = () => http.get('/api/v1/ai/providers')
+const getSupportedAIProviders = () => http.get('/api/v1/ai/providers/supported')
+const getAvailableAIModels = () => http.get('/api/v1/ai/models')
+const setDefaultAIProvider = (data) => http.put('/api/v1/ai/provider/default', data, {
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
+const testAIProvider = (data) => http.post('/api/v1/ai/provider/test', data, {
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
 
 // T3a RAG knowledge sources + generate-response endpoint.
 const getRAGSources = () => http.get('/api/v1/rag/sources')
@@ -690,6 +704,11 @@ export default {
   updateAutomationRuleWeights,
   updateAutomationRulesExecutionMode,
   updateAIProvider,
+  getAIProviders,
+  getSupportedAIProviders,
+  getAvailableAIModels,
+  setDefaultAIProvider,
+  testAIProvider,
   getRAGSources,
   getRAGSource,
   createRAGSource,
