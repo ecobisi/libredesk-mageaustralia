@@ -284,6 +284,8 @@
   "admin.inbox.signature.placeholder.customerFirstName": "Customer First Name",
   "admin.inbox.signature.placeholder.example": "Best regards,\n{'{{agent.full_name}}'}\n{'{{inbox.name}}'} Support Team",
   "admin.inbox.signature.placeholder.inboxName": "Inbox Name",
+  "admin.inbox.skipPCIScan": "Skip PCI scanning",
+  "admin.inbox.skipPCIScan.description": "Disable credit card / payment data detection for this inbox. Use for inboxes that receive automated payment notifications where card data is already masked by the sender.",
   "admin.inbox.skipTLSVerification": "Skip TLS Verification",
   "admin.inbox.skipTLSVerification.description": "Skip hostname check on the TLS certificate.",
   "admin.inbox.smtpConfig": "SMTP Configuration",

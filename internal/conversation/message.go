@@ -765,13 +765,32 @@ func (m *Manager) InsertMessage(message *models.Message) error {
 	// customer's order info gone before the agent could lift the digits to
 	// charge in a separate system.
 	if message.Type == models.MessageIncoming {
-		result := pciscrub.ScrubWithSpans(message.TextContent)
-		if len(result.Spans) > 0 {
-			if _, err := m.q.FlagMessagePCI.Exec(message.ID); err != nil {
-				m.lo.Error("error flagging message with PCI data", "error", err, "message_id", message.ID)
-			} else {
-				message.HasPCIData = true
-				m.lo.Warn("PCI data detected in incoming message", "message_id", message.ID, "conversation_uuid", message.ConversationUUID)
+		// T3z per-inbox skip-PCI-scan toggle. Some inboxes receive automated
+		// payment notifications from upstream systems where card data is
+		// already masked by the sender (e.g. "516240...529"); the scrubber
+		// otherwise still detects the plaintext expiry date and produces
+		// noisy false-positive PCI flags. Admins toggle this in the inbox
+		// form, persisted in the inbox config JSON. Errors fetching the
+		// inbox record fall through to scanning — failing closed is the
+		// safer default.
+		skipPCI := false
+		if message.InboxID > 0 {
+			if inboxRec, err := m.inboxStore.GetDBRecord(message.InboxID); err == nil {
+				var cfg imodels.Config
+				if json.Unmarshal(inboxRec.Config, &cfg) == nil && cfg.SkipPCIScan {
+					skipPCI = true
+				}
+			}
+		}
+		if !skipPCI {
+			result := pciscrub.ScrubWithSpans(message.TextContent)
+			if len(result.Spans) > 0 {
+				if _, err := m.q.FlagMessagePCI.Exec(message.ID); err != nil {
+					m.lo.Error("error flagging message with PCI data", "error", err, "message_id", message.ID)
+				} else {
+					message.HasPCIData = true
+					m.lo.Warn("PCI data detected in incoming message", "message_id", message.ID, "conversation_uuid", message.ConversationUUID)
+				}
 			}
 		}
 	}

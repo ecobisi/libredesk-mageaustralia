@@ -59,6 +59,12 @@ type Config struct {
 	// client; ReplyBox auto-inserts the resolved HTML when starting a
 	// fresh reply.
 	Signature string `json:"signature"`
+	// SkipPCIScan disables PCI (credit card / expiry / CVV) detection on
+	// incoming messages for this inbox. Use for inboxes that receive
+	// automated payment notifications where card data is already masked
+	// by the sender (e.g. "516240...529") — our scrubber otherwise still
+	// flags the plaintext expiry date and produces noisy false positives.
+	SkipPCIScan bool `json:"skip_pci_scan"`
 }
 
 // OAuthConfig holds OAuth 2.0 authentication details.

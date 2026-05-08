@@ -16,6 +16,11 @@ export const createFormSchema = (t) => z.object({
   prompt_tags_on_reply: z.boolean().optional(),
   enable_plus_addressing: z.boolean().optional(),
   auto_assign_on_reply: z.boolean().optional(),
+  // T3z: per-inbox skip-PCI-scan toggle. When enabled, the on-ingest
+  // pciscrub call is bypassed for incoming messages on this inbox. Useful
+  // for inboxes that receive automated payment notifications where card
+  // data is already masked by the sender (false-positive expiry hits).
+  skip_pci_scan: z.boolean().optional(),
   // MP1: HTML signature template appended to outgoing replies. Supports
   // dynamic placeholders ({{agent.full_name}}, {{inbox.name}}, etc.) which
   // the backend resolves on GET /api/v1/inboxes/{id}/signature.

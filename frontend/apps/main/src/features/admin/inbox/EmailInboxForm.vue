@@ -166,6 +166,27 @@
     </FormField>
 
     <!--
+      T3z: Skip PCI scanning for this inbox. Bypasses the on-ingest
+      pciscrub call so automated payment notifications (where card data
+      is already masked by the sender) don't produce false-positive
+      flags from plaintext expiry-date matches.
+    -->
+    <FormField
+      v-if="showFormFields"
+      v-slot="{ componentField, handleChange }"
+      name="skip_pci_scan"
+    >
+      <FormItem>
+        <SwitchField
+          :title="$t('admin.inbox.skipPCIScan')"
+          :description="$t('admin.inbox.skipPCIScan.description')"
+          :checked="componentField.modelValue"
+          @update:checked="handleChange"
+        />
+      </FormItem>
+    </FormField>
+
+    <!--
       MP1: Per-inbox HTML signature with placeholder buttons. Stored as a
       raw template; the backend's GET /api/v1/inboxes/{id}/signature
       resolves placeholders with the calling agent's identity (and the
@@ -1047,6 +1068,7 @@ const form = useForm({
     prompt_tags_on_reply: false,
     enable_plus_addressing: true,
     auto_assign_on_reply: false,
+    skip_pci_scan: false,
     signature: '',
     auth_type: AUTH_TYPE_PASSWORD,
     imap: {
