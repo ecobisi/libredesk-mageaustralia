@@ -1086,12 +1086,60 @@ func initImporter(i18n *i18n.I18n) *importer.Importer {
 	})
 }
 
+// fcmPushTokenAdapter bridges *user.Manager (the canonical store) and the
+// notifier.PushTokenStore interface the FCM dispatcher consumes. It exists
+// only because the user package and notification package each have their
+// own PushToken row type — keeping the row type local to each package
+// matches v2's "no shared model leaking across managers" convention.
+type fcmPushTokenAdapter struct {
+	u *user.Manager
+}
+
+func (a fcmPushTokenAdapter) GetPushTokens(userID int) ([]notifier.PushToken, error) {
+	rows, err := a.u.GetPushTokens(userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]notifier.PushToken, len(rows))
+	for i, r := range rows {
+		out[i] = notifier.PushToken{Token: r.Token, Platform: r.Platform}
+	}
+	return out, nil
+}
+
+func (a fcmPushTokenAdapter) DeletePushToken(userID int, token string) error {
+	return a.u.DeletePushToken(userID, token)
+}
+
 // initNotifDispatcher initializes the notification dispatcher.
-func initNotifDispatcher(userNotification *notifier.UserNotificationManager, outbound *notifier.Service, wsHub *ws.Hub, emailEnabled bool) *notifier.Dispatcher {
+//
+// T3ad: also initialises the FCM sender if a service-account JSON file is
+// found at the configured path (`notification.fcm.service_account_path`,
+// default `/libredesk/firebase-service-account.json` to match v1.0.3's
+// docker-compose mount). If the file is missing, FCM is disabled and the
+// dispatcher carries a nil FCMSender — every push attempt then short-
+// circuits. This is graceful degradation by design: not every install runs
+// the mobile app, and we don't want to fail boot on a missing optional
+// secret.
+func initNotifDispatcher(userNotification *notifier.UserNotificationManager, outbound *notifier.Service, wsHub *ws.Hub, userMgr *user.Manager, emailEnabled bool) *notifier.Dispatcher {
+	fcmKeyPath := cmp.Or(ko.String("notification.fcm.service_account_path"), "/libredesk/firebase-service-account.json")
+
+	var fcm *notifier.FCMSender
+	if _, err := os.Stat(fcmKeyPath); err == nil {
+		var fcmErr error
+		fcm, fcmErr = notifier.NewFCMSender(fcmKeyPath, fcmPushTokenAdapter{u: userMgr}, initLogger("fcm"))
+		if fcmErr != nil {
+			log.Printf("WARNING: FCM initialization failed: %v (push notifications disabled)", fcmErr)
+		}
+	} else {
+		log.Printf("INFO: No Firebase service account key at %s (push notifications disabled)", fcmKeyPath)
+	}
+
 	return notifier.NewDispatcher(notifier.DispatcherOpts{
 		InApp:        userNotification,
 		Outbound:     outbound,
 		WSHub:        wsHub,
+		FCM:          fcm,
 		EmailEnabled: emailEnabled,
 		Lo:           initLogger("notification-dispatcher"),
 	})

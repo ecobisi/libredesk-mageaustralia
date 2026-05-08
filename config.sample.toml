@@ -113,6 +113,15 @@ concurrency = 2
 # Maximum number of notifications that can be queued
 queue_size = 2000
 
+# Firebase Cloud Messaging (mobile push notifications). Optional: if the
+# service-account JSON file is absent, FCM is silently disabled and every
+# in-app notification skips the push fan-out. Mount the file at the path
+# below via docker-compose (see firebase-service-account.json:ro mount).
+[notification.fcm]
+# Path to the Firebase service-account JSON file. Default matches the
+# v1.0.3 docker-compose mount target.
+service_account_path = "/libredesk/firebase-service-account.json"
+
 [automation]
 # Number of workers processing automation rules
 worker_count = 10

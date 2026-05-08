@@ -105,6 +105,11 @@ type queries struct {
 	// dispatcher landing in T3ad.
 	RegisterPushToken   *sqlx.Stmt `query:"register-push-token"`
 	UnregisterPushToken *sqlx.Stmt `query:"unregister-push-token"`
+	// T3ad: read-side + invalidation. The FCM dispatcher fetches all tokens
+	// for a recipient at notification time, then calls DeletePushToken when
+	// Firebase reports a token is no longer registered.
+	GetPushTokens   *sqlx.Stmt `query:"get-push-tokens"`
+	DeletePushToken *sqlx.Stmt `query:"delete-push-token"`
 
 	MergeVisitorToContact *sqlx.Stmt `query:"merge-visitor-to-contact"`
 }
@@ -470,6 +475,37 @@ func (u *Manager) UnregisterPushToken(userID int, token string) error {
 	if _, err := u.q.UnregisterPushToken.Exec(userID, token); err != nil {
 		u.lo.Error("error unregistering push token", "error", err, "user_id", userID)
 		return envelope.NewError(envelope.GeneralError, u.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	return nil
+}
+
+// PushToken is a single registered device for an agent — token plus the
+// platform string we set the platform-specific FCM payload from.
+type PushToken struct {
+	Token    string `db:"token"`
+	Platform string `db:"platform"`
+}
+
+// GetPushTokens returns every registered (token, platform) pair for the
+// given agent. Used by the FCM dispatcher to fan a single notification out
+// to all of an agent's devices.
+func (u *Manager) GetPushTokens(userID int) ([]PushToken, error) {
+	var tokens []PushToken
+	if err := u.q.GetPushTokens.Select(&tokens, userID); err != nil {
+		u.lo.Error("error fetching push tokens", "error", err, "user_id", userID)
+		return nil, fmt.Errorf("fetching push tokens: %w", err)
+	}
+	return tokens, nil
+}
+
+// DeletePushToken removes a single (user, token) pair. Called by the FCM
+// dispatcher when Firebase reports a token is no longer valid (the device
+// was uninstalled or its token was rotated). Best-effort — a missing row
+// just means another path got there first.
+func (u *Manager) DeletePushToken(userID int, token string) error {
+	if _, err := u.q.DeletePushToken.Exec(userID, token); err != nil {
+		u.lo.Error("error deleting push token", "error", err, "user_id", userID)
+		return fmt.Errorf("deleting push token: %w", err)
 	}
 	return nil
 }

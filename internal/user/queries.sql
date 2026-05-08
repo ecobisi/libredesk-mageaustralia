@@ -344,6 +344,15 @@ DO UPDATE SET platform = EXCLUDED.platform, updated_at = NOW();
 -- name: unregister-push-token
 DELETE FROM user_push_tokens WHERE user_id = $1 AND token = $2;
 
+-- name: get-push-tokens
+SELECT token, platform FROM user_push_tokens WHERE user_id = $1;
+
+-- name: delete-push-token
+-- Used by the FCM dispatcher when Firebase reports a token is no longer
+-- valid (registration-token-not-registered / invalid-argument). Best-effort:
+-- a missing row is fine.
+DELETE FROM user_push_tokens WHERE user_id = $1 AND token = $2;
+
 -- name: get-user-by-external-id
 SELECT
     u.id,

@@ -42,11 +42,12 @@ type EmailNotification struct {
 	Content    string
 }
 
-// Dispatcher coordinates sending notifications through multiple channels: WS, DB, email.
+// Dispatcher coordinates sending notifications through multiple channels: WS, DB, email, FCM.
 type Dispatcher struct {
 	inApp        *UserNotificationManager
 	outbound     *Service
 	wsHub        WSHub
+	fcm          *FCMSender
 	emailEnabled bool
 	lo           *logf.Logger
 }
@@ -56,6 +57,7 @@ type DispatcherOpts struct {
 	InApp        *UserNotificationManager
 	Outbound     *Service
 	WSHub        WSHub
+	FCM          *FCMSender // optional — nil if firebase-service-account.json is absent
 	EmailEnabled bool
 	Lo           *logf.Logger
 }
@@ -66,6 +68,7 @@ func NewDispatcher(opts DispatcherOpts) *Dispatcher {
 		inApp:        opts.InApp,
 		outbound:     opts.Outbound,
 		wsHub:        opts.WSHub,
+		fcm:          opts.FCM,
 		emailEnabled: opts.EmailEnabled,
 		lo:           opts.Lo,
 	}
@@ -129,6 +132,15 @@ func (d *Dispatcher) sendToRecipient(recipientID int, n Notification) *models.Us
 	notification.ActorFirstName = null.StringFrom(n.ActorFirstName)
 	notification.ActorLastName = null.StringFrom(n.ActorLastName)
 	d.broadcastNotification([]int{recipientID}, notification)
+
+	// T3ad: fan the same notification out to the recipient's mobile devices
+	// via FCM. Fire-and-forget — push delivery shouldn't block in-app
+	// notification creation, and FCM client calls can take a few seconds
+	// per token. Gated on the FCMSender being non-nil so installs without
+	// firebase-service-account.json silently no-op.
+	if d.fcm != nil {
+		go d.fcm.SendToUser(recipientID, n.Title, n.Body.String, n.ConversationUUID)
+	}
 	return &notification
 }
 
