@@ -634,6 +634,7 @@ SELECT
     m.sender_type,
     m.sender_id,
     m.meta,
+    m.has_pci_data,
     c.uuid as conversation_uuid,
     u.id AS "author.id",
     u.first_name AS "author.first_name",
@@ -683,6 +684,7 @@ SELECT
    m.sender_id,
    m.sender_type,
    m.meta,
+   m.has_pci_data,
    $1::uuid AS conversation_uuid,
    u.id AS "author.id",
    u.first_name AS "author.first_name",
@@ -1137,3 +1139,69 @@ LIMIT $1 OFFSET $2;
 DELETE FROM conversation_messages
 WHERE type = 'activity'
 AND created_at < NOW() - INTERVAL '1 day' * $1;
+
+-- PCI redaction (T3y) -------------------------------------------------------
+-- Card data is detected at message-insert time via the go-pci-scrub library.
+-- A flagged message is surfaced in the agent UI with a banner + "Redact Now"
+-- button; if the agent does nothing, the auto-redact loop scrubs anything
+-- still flagged after 7 days as a safety net. Original IMAP email is best-
+-- effort deleted via IMAPDeleteFunc; failure is logged and notified but
+-- never blocks the in-DB redaction.
+
+-- name: flag-message-pci
+-- Marks an incoming message as containing card data. Called from
+-- InsertMessage right after the row is written, so pci_detected_at is the
+-- detection timestamp (not the message create time — they're functionally
+-- equivalent today but kept distinct so a future re-scan pass can update
+-- this without rewriting created_at).
+UPDATE conversation_messages
+SET has_pci_data = true,
+    pci_detected_at = NOW()
+WHERE id = $1;
+
+-- name: redact-message-pci
+-- Replaces both content (HTML/markdown) and text_content (search index) with
+-- the scrubbed versions and clears the flag in one statement so the UI
+-- banner disappears as soon as the row is updated. RETURNING fields drive
+-- the activity-note + IMAP-delete callbacks in pci_redact.go.
+UPDATE conversation_messages
+SET content = $2,
+    text_content = $3,
+    has_pci_data = false,
+    pci_detected_at = NULL,
+    updated_at = NOW()
+WHERE uuid = $1
+RETURNING id, conversation_id, source_id, "type";
+
+-- name: get-pci-messages-for-auto-redact
+-- 7-day safety net feed. Conversation join provides the inbox_id and
+-- conversation UUID needed by the IMAP-delete callback and activity-note
+-- insertion respectively, so the auto-redact loop can stay self-contained.
+SELECT m.id,
+       m.uuid,
+       m.content,
+       m.text_content,
+       m.source_id,
+       m.conversation_id,
+       c.uuid AS conversation_uuid,
+       c.inbox_id
+FROM conversation_messages m
+JOIN conversations c ON c.id = m.conversation_id
+WHERE m.has_pci_data = true
+  AND m.pci_detected_at < NOW() - INTERVAL '7 days';
+
+-- name: get-message-for-redact
+-- Single-message fetch used by the manual "Redact Now" handler. Mirrors the
+-- shape of get-pci-messages-for-auto-redact so both code paths can feed the
+-- same downstream activity-note + IMAP-delete logic.
+SELECT m.id,
+       m.uuid,
+       m.content,
+       m.text_content,
+       m.source_id,
+       m.conversation_id,
+       c.uuid AS conversation_uuid,
+       c.inbox_id
+FROM conversation_messages m
+JOIN conversations c ON c.id = m.conversation_id
+WHERE m.uuid = $1;

@@ -62,6 +62,28 @@
           class="flex flex-col justify-end message-bubble"
           :class="bubbleClasses"
         >
+          <!-- T3y PCI Data Warning. Detected on ingest by go-pci-scrub;
+               banner stays visible until the agent clicks Redact Now or
+               the 7-day auto-redact safety net fires. -->
+          <div
+            v-if="message.has_pci_data"
+            class="flex items-center gap-2 mb-2 px-3 py-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md"
+          >
+            <ShieldAlert class="w-4 h-4 text-red-500 shrink-0" />
+            <span class="text-xs text-red-700 dark:text-red-300 font-medium flex-1">
+              {{ t('conversation.pciDataWarning') }}
+            </span>
+            <button
+              v-if="!redacting"
+              type="button"
+              class="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 underline"
+              @click="redactPCI"
+            >
+              {{ t('conversation.pciRedactNow') }}
+            </button>
+            <Spinner v-if="redacting" size="sm" />
+          </div>
+
           <!-- Message Envelope -->
           <MessageEnvelope :message="message" v-if="showEnvelope" />
 
@@ -260,7 +282,7 @@ import { useEmitter } from '@main/composables/useEmitter'
 import { useToast } from '@main/composables/useToast'
 import { EMITTER_EVENTS } from '@main/constants/emitterEvents'
 import { useI18n } from 'vue-i18n'
-import { Lock, Mail, RotateCcw, Check, Pencil, Trash2, Forward } from 'lucide-vue-next'
+import { Lock, Mail, RotateCcw, Check, Pencil, Trash2, Forward, ShieldAlert } from 'lucide-vue-next'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@shared-ui/components/ui/tooltip'
 import { Spinner } from '@shared-ui/components/ui/spinner'
 import { formatMessageTimestamp, formatFullTimestamp } from '@shared-ui/utils/datetime.js'
@@ -362,6 +384,31 @@ const showRetry = computed(() => isOutgoing.value && props.message.status === 'f
 
 const retryMessage = (msg) => {
   api.retryMessage(convStore.current.uuid, msg.uuid)
+}
+
+// T3y manual redact. Confirm-then-fire because the redaction is irreversible
+// at the DB level (the original content is rewritten in-place; even rolling
+// back from a backup would expose the card again). Reload after success so
+// the scrubbed content + cleared has_pci_data flag both refresh — cheaper
+// than a per-message store mutation since this is a rare/destructive path.
+const redacting = ref(false)
+const redactPCI = async () => {
+  if (
+    !confirm(
+      t('conversation.pciRedactConfirm') ||
+        'This will permanently redact credit card data from this message and attempt to delete the original email. This cannot be undone.'
+    )
+  ) {
+    return
+  }
+  redacting.value = true
+  try {
+    await api.redactMessagePCI(convStore.current.uuid, props.message.uuid)
+    window.location.reload()
+  } catch (err) {
+    redacting.value = false
+    toast.error(err?.response?.data?.message || err.message || 'Redaction failed')
+  }
 }
 
 // Edit/delete private notes — only the author of the note can mutate it.

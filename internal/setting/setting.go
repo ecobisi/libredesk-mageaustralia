@@ -207,6 +207,26 @@ func (m *Manager) Get(key string) (types.JSONText, error) {
 	return b, nil
 }
 
+// GetPCISettings returns PCI redaction notification configuration.
+//
+// Used by the PCI auto-redact loop and the manual redact handler to figure
+// out which agent to ping (and via what channel) when card data was
+// successfully scrubbed but the original IMAP email could not be deleted.
+// Empty settings are not an error: callers treat NotifyAgentID == 0 as
+// "notifications disabled".
+func (m *Manager) GetPCISettings() (models.PCISettings, error) {
+	var out models.PCISettings
+	b, err := m.GetByPrefix("pci.")
+	if err != nil {
+		return out, err
+	}
+	if err := json.Unmarshal([]byte(b), &out); err != nil {
+		m.lo.Error("error unmarshalling PCI settings", "error", err)
+		return out, envelope.NewError(envelope.GeneralError, "Error parsing PCI settings", nil)
+	}
+	return out, nil
+}
+
 // GetAppRootURL returns the root URL of the app.
 func (m *Manager) GetAppRootURL() (string, error) {
 	rootURL, err := m.Get("app.root_url")

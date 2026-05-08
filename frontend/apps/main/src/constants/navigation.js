@@ -42,6 +42,12 @@ export const adminNavItems = [
         href: '/admin/trash',
         permission: 'general_settings:manage',
         icon: 'Trash2'
+      },
+      {
+        titleKey: 'admin.pci.title',
+        href: '/admin/pci',
+        permission: 'general_settings:manage',
+        icon: 'ShieldAlert'
       }
     ]
   },

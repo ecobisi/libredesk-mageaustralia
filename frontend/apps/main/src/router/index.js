@@ -208,6 +208,12 @@ const routes = [
             meta: { titleKey: 'admin.trash.title' }
           },
           {
+            path: 'pci',
+            name: 'pci-settings',
+            component: () => import('@main/views/admin/pci/PCISettings.vue'),
+            meta: { titleKey: 'admin.pci.title' }
+          },
+          {
             path: 'business-hours',
             component: () => import('@main/views/admin/business-hours/BusinessHours.vue'),
             meta: { titleKey: 'globals.terms.businessHour', titleCount: 2 },

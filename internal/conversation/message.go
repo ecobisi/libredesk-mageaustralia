@@ -28,6 +28,7 @@ import (
 	umodels "github.com/abhinavxd/libredesk/internal/user/models"
 	wmodels "github.com/abhinavxd/libredesk/internal/webhook/models"
 	"github.com/lib/pq"
+	pciscrub "github.com/mageaustralia/go-pci-scrub"
 	"github.com/volatiletech/null/v9"
 )
 
@@ -748,6 +749,31 @@ func (m *Manager) InsertMessage(message *models.Message) error {
 	// Attach just inserted message to the media.
 	for _, media := range message.Media {
 		m.mediaStore.Attach(media.ID, mmodels.ModelMessages, message.ID)
+	}
+
+	// T3y PCI redaction — scan incoming messages for credit-card data.
+	// Outgoing messages are agent-authored so are out of scope here; agent
+	// composer guards (T3y v1.0.3+ work) live in a separate spec row. The
+	// scrubber operates on text_content (already HTML-stripped above) so we
+	// only see actual rendered text, not src=https://example.com/4111…
+	// false positives from URL params.
+	//
+	// Detection only — the message body itself is *not* mutated yet. Agents
+	// see a banner + manual "Redact Now" button; auto-redact at 7 days
+	// (RunPCIAutoRedact) is the safety net for anything missed. This split
+	// matters: a real card number redacted on ingest would leave the
+	// customer's order info gone before the agent could lift the digits to
+	// charge in a separate system.
+	if message.Type == models.MessageIncoming {
+		result := pciscrub.ScrubWithSpans(message.TextContent)
+		if len(result.Spans) > 0 {
+			if _, err := m.q.FlagMessagePCI.Exec(message.ID); err != nil {
+				m.lo.Error("error flagging message with PCI data", "error", err, "message_id", message.ID)
+			} else {
+				message.HasPCIData = true
+				m.lo.Warn("PCI data detected in incoming message", "message_id", message.ID, "conversation_uuid", message.ConversationUUID)
+			}
+		}
 	}
 
 	// Inline pasted/dropped images in the reply editor are uploaded before

@@ -242,6 +242,11 @@ func main() {
 	// an import cycle.
 	conversation.IMAPUnspamFunc = inbox.UnspamIMAPMessage
 
+	// T3y: same callback shape — conversation pkg drives PCI scrub timing,
+	// inbox pkg owns the IMAP socket. Used by both the manual "Redact Now"
+	// handler and the 7-day auto-redact loop below.
+	conversation.IMAPDeleteFunc = inbox.DeleteIMAPMessage
+
 	// Start inboxes.
 	startInboxes(ctx, inbox, conversation, user, conversation.SignAvatarURL)
 
@@ -258,6 +263,11 @@ func main() {
 	go user.MonitorUserAvailability(ctx, onUsersOffline(conversation))
 	go conversation.RunDraftCleaner(ctx, draftRetentionDuration)
 	go conversation.RunTrashManager(ctx, makeTrashSettingsFunc(settings))
+	// T3y: 7-day auto-redact safety net for any PCI-flagged message an
+	// agent never reviewed. Hourly tick, runs alongside the other workers.
+	// Reuses IMAPDeleteFunc set above so the callback wiring stays in one
+	// place.
+	go conversation.RunPCIAutoRedact(ctx, conversation.IMAPDeleteFunc)
 	go userNotification.RunNotificationCleaner(ctx)
 
 	var app = &App{

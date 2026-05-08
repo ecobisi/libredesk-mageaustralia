@@ -41,3 +41,15 @@ type TrashSettings struct {
 	AutoDeleteDays        int `json:"trash.auto_delete_days" db:"trash.auto_delete_days"`
 	ActivityPurgeDays     int `json:"trash.activity_purge_days" db:"trash.activity_purge_days"`
 }
+
+// PCISettings holds PCI redaction notification configuration. Used by the
+// auto-redact loop and manual redact handler to alert an admin when card
+// data was successfully scrubbed but the original email could not be
+// removed from the IMAP source mailbox (so it can be deleted manually).
+//
+// NotifyMethod is one of "in_app", "email", or "both"; empty defaults to
+// "both" at the call site. NotifyAgentID = 0 disables notifications.
+type PCISettings struct {
+	NotifyAgentID int    `json:"pci.notify_agent_id" db:"pci.notify_agent_id"`
+	NotifyMethod  string `json:"pci.notify_method" db:"pci.notify_method"`
+}

@@ -191,3 +191,37 @@ func handleUpdateTrashSettings(r *fastglue.Request) error {
 	}
 	return r.SendEnvelope(true)
 }
+
+// handleGetPCISettings fetches PCI redaction notification settings (T3y).
+// Returns the raw "pci."-prefixed envelope so the frontend can drive a
+// generic key/value form mirroring the trash + AI settings pages.
+func handleGetPCISettings(r *fastglue.Request) error {
+	app := r.Context.(*App)
+	out, err := app.setting.GetByPrefix("pci.")
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(json.RawMessage(out))
+}
+
+// handleUpdatePCISettings updates PCI redaction notification settings.
+//
+// notify_method is one of "in_app" / "email" / "both" (or empty, treated as
+// "both" by the dispatcher). notify_agent_id == 0 disables alerts entirely.
+// As with trash, no reloadSettings call is needed — pci_redact.go reads
+// settings on every alert via GetPCISettings, so changes take effect on
+// the next IMAP-delete failure.
+func handleUpdatePCISettings(r *fastglue.Request) error {
+	app := r.Context.(*App)
+	var req models.PCISettings
+	if err := r.Decode(&req, "json"); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
+	}
+	if req.NotifyMethod != "" && req.NotifyMethod != "in_app" && req.NotifyMethod != "email" && req.NotifyMethod != "both" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid notification method. Use: in_app, email, or both", nil, envelope.InputError)
+	}
+	if err := app.setting.Update(req); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(true)
+}

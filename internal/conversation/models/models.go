@@ -325,6 +325,12 @@ type Message struct {
 	SenderType        string                 `db:"sender_type" json:"sender_type"`
 	InboxID           int                    `db:"inbox_id" json:"-"`
 	Meta              json.RawMessage        `db:"meta" json:"meta"`
+	// HasPCIData flags messages where the on-ingest PCI scrubber found a
+	// likely card-number span. Surfaced to the agent UI as a warning banner
+	// + manual "Redact Now" button (T3y); also drives the 7-day auto-redact
+	// safety net in pci_redact.go.
+	HasPCIData    bool      `db:"has_pci_data" json:"has_pci_data"`
+	PCIDetectedAt null.Time `db:"pci_detected_at" json:"pci_detected_at"`
 	Attachments       attachment.Attachments `db:"attachments" json:"attachments"`
 	From              string                 `db:"from"  json:"-"`
 	Subject           string                 `db:"subject" json:"-"`

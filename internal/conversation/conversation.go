@@ -30,6 +30,7 @@ import (
 	mmodels "github.com/abhinavxd/libredesk/internal/media/models"
 	notifier "github.com/abhinavxd/libredesk/internal/notification"
 	nmodels "github.com/abhinavxd/libredesk/internal/notification/models"
+	settingmodels "github.com/abhinavxd/libredesk/internal/setting/models"
 	slaModels "github.com/abhinavxd/libredesk/internal/sla/models"
 	"github.com/abhinavxd/libredesk/internal/stringutil"
 	tmodels "github.com/abhinavxd/libredesk/internal/team/models"
@@ -41,6 +42,7 @@ import (
 	"github.com/jmoiron/sqlx/types"
 	"github.com/knadh/go-i18n"
 	"github.com/lib/pq"
+	pciscrub "github.com/mageaustralia/go-pci-scrub"
 	"github.com/volatiletech/null/v9"
 	"github.com/zerodha/logf"
 )
@@ -92,6 +94,15 @@ type Manager struct {
 	// trigger a "not spam" signal (Gmail uses these as training input)
 	// without depending on the inbox package directly. nil-safe.
 	IMAPUnspamFunc func(inboxID int, messageID string) error
+
+	// IMAPDeleteFunc, when set, removes the original email from the IMAP
+	// source mailbox after PCI redaction has scrubbed the DB-stored copy.
+	// Wired in cmd/main.go to the inbox manager's DeleteIMAPMessage. T3y
+	// uses the same callback shape as IMAPUnspamFunc to keep the
+	// conversation package free of an inbox-package import. nil-safe; a
+	// nil callback skips IMAP cleanup and just notes the redaction in the
+	// activity log.
+	IMAPDeleteFunc func(inboxID int, messageID string) error
 }
 
 // WidgetConversationView represents the conversation data for widget clients
@@ -163,6 +174,7 @@ type settingsStore interface {
 	GetAppRootURL() (string, error)
 	GetByPrefix(prefix string) (types.JSONText, error)
 	Get(key string) (types.JSONText, error)
+	GetPCISettings() (settingmodels.PCISettings, error)
 }
 
 type csatStore interface {
@@ -324,6 +336,12 @@ type queries struct {
 	DeleteMessage                      *sqlx.Stmt `query:"delete-message"`
 	UpdatePrivateNoteContent           *sqlx.Stmt `query:"update-private-note-content"`
 	SoftDeletePrivateNote              *sqlx.Stmt `query:"soft-delete-private-note"`
+
+	// PCI redaction queries (T3y).
+	FlagMessagePCI             *sqlx.Stmt `query:"flag-message-pci"`
+	RedactMessagePCI           *sqlx.Stmt `query:"redact-message-pci"`
+	GetPCIMessagesForAutoRedact *sqlx.Stmt `query:"get-pci-messages-for-auto-redact"`
+	GetMessageForRedact        *sqlx.Stmt `query:"get-message-for-redact"`
 
 	// Conversation continuity queries.
 	GetOfflineLiveChatConversations *sqlx.Stmt `query:"get-offline-livechat-conversations"`
@@ -1319,15 +1337,16 @@ func (m *Manager) notifyParticipants(message models.Message) {
 				// makeAbsoluteURLs rewrites relative /uploads/UUID paths and
 				// already-absolute /uploads/UUID URLs into signed long-expiry
 				// URLs so inline images render in email clients without
-				// requiring an authenticated session. PCI scrubbing of
-				// message body remains TODO and is tracked under spec section
-				// 5.13 (Tier 3 — PCI redaction); doing it here alone would
-				// give a false sense of security since raw PCI data still
-				// lives in the DB and is visible in the in-app conversation
-				// view.
+				// requiring an authenticated session.
+				//
+				// T3y: pciscrub.Scrub() additionally masks any credit-card
+				// numbers in the rendered body so they don't leak through
+				// agent notification emails (which sit in agent inboxes
+				// indefinitely). The in-app banner + DB scrub close the
+				// primary leak; this closes the email-side leak.
 				"Message": map[string]any{
 					"UUID":    message.UUID,
-					"Content": m.makeAbsoluteURLs(message.Content),
+					"Content": pciscrub.Scrub(m.makeAbsoluteURLs(message.Content)),
 				},
 			})
 		if err != nil {

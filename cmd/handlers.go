@@ -43,6 +43,9 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.POST("/api/v1/settings/notifications/email/test", perm(handleTestEmailNotificationSettings, "notification_settings:manage"))
 	g.GET("/api/v1/settings/trash", perm(handleGetTrashSettings, "general_settings:manage"))
 	g.PUT("/api/v1/settings/trash", perm(handleUpdateTrashSettings, "general_settings:manage"))
+	// T3y PCI redaction notification settings.
+	g.GET("/api/v1/settings/pci", perm(handleGetPCISettings, "general_settings:manage"))
+	g.PUT("/api/v1/settings/pci", perm(handleUpdatePCISettings, "general_settings:manage"))
 
 	// OpenID connect single sign-on.
 	g.GET("/api/v1/oidc", perm(handleGetAllOIDC, "oidc:manage"))
@@ -103,6 +106,9 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.GET("/api/v1/conversations/{uuid}/messages", perm(handleGetMessages, "messages:read"))
 	g.POST("/api/v1/conversations/{cuuid}/messages", perm(handleSendMessage, "messages:write"))
 	g.PUT("/api/v1/conversations/{cuuid}/messages/{uuid}/retry", perm(handleRetryMessage, "messages:write"))
+	// T3y manual "Redact Now" — scrub PCI from a flagged message immediately
+	// rather than waiting on the 7-day auto-redact safety net.
+	g.POST("/api/v1/conversations/{cuuid}/messages/{uuid}/redact", perm(handleRedactMessagePCI, "messages:write"))
 	g.PUT("/api/v1/conversations/{cuuid}/messages/{uuid}/note", perm(handleUpdatePrivateNote, "messages:write"))
 	g.DELETE("/api/v1/conversations/{cuuid}/messages/{uuid}/note", perm(handleDeletePrivateNote, "messages:write"))
 	g.POST("/api/v1/conversations", perm(handleCreateConversation, "conversations:write"))

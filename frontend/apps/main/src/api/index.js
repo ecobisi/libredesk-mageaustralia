@@ -346,6 +346,12 @@ const getConversationMessage = (cuuid, uuid) =>
   http.get(`/api/v1/conversations/${cuuid}/messages/${uuid}`)
 const retryMessage = (cuuid, uuid) =>
   http.put(`/api/v1/conversations/${cuuid}/messages/${uuid}/retry`)
+// T3y manual PCI redact — fired from the message bubble's "Redact Now"
+// button when an agent wants to scrub card data immediately rather than
+// waiting on the 7-day auto-redact safety net. Server-side handler does
+// the DB scrub + best-effort IMAP delete.
+const redactMessagePCI = (cuuid, uuid) =>
+  http.post(`/api/v1/conversations/${cuuid}/messages/${uuid}/redact`)
 const updatePrivateNote = (cuuid, uuid, content) =>
   http.put(`/api/v1/conversations/${cuuid}/messages/${uuid}/note`, { content })
 const deletePrivateNote = (cuuid, uuid) =>
@@ -672,6 +678,7 @@ export default {
   createConversation,
   sendMessage,
   retryMessage,
+  redactMessagePCI,
   updatePrivateNote,
   deletePrivateNote,
   createUser,

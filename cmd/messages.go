@@ -544,3 +544,57 @@ func resolveContentCIDs(msg *cmodels.Message, rootURL string) {
 		msg.Content = strings.ReplaceAll(msg.Content, `src='/uploads/`, `src='`+rootURL+`/uploads/`)
 	}
 }
+
+// handleRedactMessagePCI is the manual "Redact Now" path: agents click the
+// banner button on a flagged message to scrub it immediately rather than
+// waiting for the 7-day auto-redact safety net. The handler enforces
+// conversation access, scrubs the DB row, then best-effort deletes the
+// original from IMAP via the inbox manager. IMAP failure is logged and
+// notified to the configured PCI admin agent (PCISettings) but does NOT
+// roll back the in-DB redaction — the primary in-app exposure is closed
+// the moment the row is rewritten.
+//
+// Activity note is inserted in either branch so the conversation audit
+// trail records the redaction regardless of IMAP outcome.
+func handleRedactMessagePCI(r *fastglue.Request) error {
+	var (
+		app   = r.Context.(*App)
+		uuid  = r.RequestCtx.UserValue("uuid").(string)
+		cuuid = r.RequestCtx.UserValue("cuuid").(string)
+		auser = r.RequestCtx.UserValue("user").(amodels.User)
+	)
+
+	user, err := app.user.GetAgent(auser.ID, "")
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+
+	if _, err := enforceConversationAccess(app, cuuid, user); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+
+	msg, err := app.conversation.RedactMessagePCI(uuid)
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+
+	actorName := strings.TrimSpace(user.FirstName + " " + user.LastName)
+	if actorName == "" {
+		actorName = user.Email.String
+	}
+
+	if msg.SourceID.Valid && msg.SourceID.String != "" {
+		if err := app.inbox.DeleteIMAPMessage(msg.InboxID, msg.SourceID.String); err != nil {
+			app.lo.Error("failed to delete PCI email from IMAP after manual redact", "error", err, "message_uuid", uuid)
+			app.conversation.InsertPCIRedactActivityNote(cuuid, actorName, false,
+				"Card data was redacted but the original email could not be deleted from Gmail. Please delete manually.")
+			app.conversation.NotifyPCIIMAPDeleteFailed(cuuid, uuid)
+		} else {
+			app.conversation.InsertPCIRedactActivityNote(cuuid, actorName, true, "")
+		}
+	} else {
+		app.conversation.InsertPCIRedactActivityNote(cuuid, actorName, true, "")
+	}
+
+	return r.SendEnvelope(true)
+}

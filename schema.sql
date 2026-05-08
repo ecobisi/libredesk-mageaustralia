@@ -291,8 +291,15 @@ CREATE TABLE conversation_messages (
     source_id TEXT NULL,
  	sender_id BIGINT REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
     sender_type message_sender_type NOT NULL,
-    meta JSONB DEFAULT '{}'::JSONB NULL
+    meta JSONB DEFAULT '{}'::JSONB NULL,
+    -- T3y PCI redaction. has_pci_data is set by the on-ingest scrubber so
+    -- the agent UI can render a warning banner; pci_detected_at drives the
+    -- 7-day auto-redact safety net. Both are cleared when the message is
+    -- redacted (manually via Redact Now or automatically after 7 days).
+    has_pci_data BOOLEAN DEFAULT FALSE NOT NULL,
+    pci_detected_at TIMESTAMPTZ NULL
 );
+CREATE INDEX IF NOT EXISTS index_conversation_messages_on_has_pci_data ON conversation_messages (has_pci_data, pci_detected_at) WHERE has_pci_data = true;
 CREATE INDEX index_trgm_conversation_messages_on_text_content ON conversation_messages USING GIN (text_content gin_trgm_ops);
 CREATE INDEX index_conversation_messages_on_conversation_id ON conversation_messages (conversation_id);
 CREATE INDEX index_conversation_messages_on_created_at ON conversation_messages (created_at);
