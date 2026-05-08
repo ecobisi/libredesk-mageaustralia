@@ -220,6 +220,12 @@ const routes = [
             meta: { titleKey: 'admin.ai.title' }
           },
           {
+            path: 'knowledge-sources',
+            name: 'knowledge-sources',
+            component: () => import('@main/views/admin/ai/RAGSettings.vue'),
+            meta: { titleKey: 'admin.knowledgeSources.title' }
+          },
+          {
             path: 'business-hours',
             component: () => import('@main/views/admin/business-hours/BusinessHours.vue'),
             meta: { titleKey: 'globals.terms.businessHour', titleCount: 2 },

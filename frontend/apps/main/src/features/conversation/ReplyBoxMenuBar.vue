@@ -104,6 +104,25 @@
       >
         <Zap class="h-4 w-4" />
       </Toggle>
+      <!--
+        T3a "Generate Response" button. Only surfaces in reply mode
+        (a knowledge-base reply on a private note rarely makes
+        sense). Disabled while a request is in flight; the icon
+        pulses to telegraph progress without taking up space for a
+        spinner.
+      -->
+      <Button
+        v-if="showGenerateButton"
+        variant="outline"
+        size="sm"
+        class="h-8 px-3 text-xs"
+        :disabled="isGenerating"
+        :title="$t('replyBox.generateResponse')"
+        @click="emit('generateResponse')"
+      >
+        <Sparkles class="h-3.5 w-3.5 mr-1.5" :class="{ 'animate-pulse': isGenerating }" />
+        {{ isGenerating ? $t('replyBox.generating') : $t('replyBox.generateResponse') }}
+      </Button>
     </div>
     <div class="flex items-center" v-if="showSendButton">
       <!-- Delete-draft button. Only surfaces when there's something to discard
@@ -187,7 +206,8 @@ import {
   Link as LinkIcon,
   Image as ImageIcon,
   Trash2,
-  Zap
+  Zap,
+  Sparkles
 } from 'lucide-vue-next'
 import { useEmitter } from '@main/composables/useEmitter'
 import { EMITTER_EVENTS } from '@main/constants/emitterEvents.js'
@@ -210,7 +230,7 @@ const isEmojiPickerVisible = ref(false)
 // chrome they have to ignore.
 const isToolbarVisible = ref(false)
 const emojiPickerRef = ref(null)
-const emit = defineEmits(['emojiSelect', 'sendWithStatus', 'deleteDraft', 'editorCommand'])
+const emit = defineEmits(['emojiSelect', 'sendWithStatus', 'deleteDraft', 'editorCommand', 'generateResponse'])
 
 // Using defineProps for props that don't need two-way binding
 const props = defineProps({
@@ -252,6 +272,19 @@ const props = defineProps({
   macroPickerCommand: {
     type: String,
     default: 'apply-macro-to-existing-conversation'
+  },
+  // T3a: drives the "Generating..." state on the Generate Response
+  // button while the RAG endpoint is in flight.
+  isGenerating: {
+    type: Boolean,
+    default: false
+  },
+  // T3a: hides the Generate Response button when irrelevant
+  // (private notes — knowledge-base lookups for internal-only
+  // writes rarely add value).
+  showGenerateButton: {
+    type: Boolean,
+    default: true
   }
 })
 

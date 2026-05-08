@@ -34,6 +34,7 @@ import {
   ShieldAlert,
   Mic,
   Trash2,
+  Database,
   Settings,
   Clock,
   Timer,
@@ -84,6 +85,7 @@ const navIconMap = {
   CircleUser,
   Contact,
   Trash2,
+  Database,
   Mic,
   Activity
 }

@@ -54,6 +54,12 @@ export const adminNavItems = [
         href: '/admin/ai',
         permission: 'ai:manage',
         icon: 'Mic'
+      },
+      {
+        titleKey: 'admin.knowledgeSources.title',
+        href: '/admin/knowledge-sources',
+        permission: 'ai:manage',
+        icon: 'Database'
       }
     ]
   },

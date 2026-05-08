@@ -127,10 +127,13 @@
       :isFullscreen="isFullscreen"
       :handleFileUpload="handleFileUpload"
       :isSending="isSending"
+      :isGenerating="isGenerating"
+      :showGenerateButton="messageType === 'reply'"
       :enableSend="enableSend"
       :handleSend="handleSend"
       :messageType="messageType"
       @emojiSelect="handleEmojiSelect"
+      @generateResponse="handleGenerateResponse"
     />
   </div>
 </template>
@@ -219,6 +222,12 @@ const props = defineProps({
     type: Boolean,
     required: true
   },
+  // T3a: passed through from ReplyBox so the Generate Response
+  // button can render its loading state.
+  isGenerating: {
+    type: Boolean,
+    default: false
+  },
   uploadingFiles: {
     type: Array,
     required: true
@@ -242,6 +251,8 @@ const emit = defineEmits([
   'inlineImageUpload',
   'fileDelete',
   'aiPromptSelected',
+  // T3a: bubbles the Generate Response click up to ReplyBox.
+  'generateResponse',
   // UX9: TextEditor splits dropped files into images (inserted inline) and
   // non-images (forwarded here). Parent ReplyBox treats them as regular
   // attachment uploads.
@@ -338,6 +349,10 @@ const handleEmojiSelect = (emoji) => {
 
 const handleAiPromptSelected = (key) => {
   emit('aiPromptSelected', key)
+}
+
+const handleGenerateResponse = () => {
+  emit('generateResponse')
 }
 
 // Watch and update macro view based on message type this filters our macros.

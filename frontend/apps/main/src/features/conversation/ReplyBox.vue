@@ -139,6 +139,7 @@
           :isFullscreen="true"
           :aiPrompts="aiPrompts"
           :isSending="isSending"
+          :isGenerating="isGenerating"
           :isDraftLoading="isDraftLoading"
           :uploadingFiles="uploadingFiles"
           :uploadedFiles="mediaFiles"
@@ -203,6 +204,7 @@
         @fileDelete="handleFileDelete"
         @filesDropped="uploadFiles"
         @aiPromptSelected="handleAiPromptSelected"
+        @generateResponse="handleGenerateResponse"
       />
     </div>
   </div>
@@ -303,6 +305,9 @@ const openAIKeyPrompt = ref(false)
 const isOpenAIKeyUpdating = ref(false)
 const isEditorFullscreen = ref(false)
 const isSending = ref(false)
+// T3a: drives the "Generating..." state on the Generate Response
+// button while the RAG endpoint is in flight.
+const isGenerating = ref(false)
 const messageType = useStorage('replyBoxMessageType', 'reply')
 const to = ref('')
 const cc = ref('')
@@ -419,6 +424,78 @@ const handleAiPromptSelected = async (key) => {
       openAIKeyPrompt.value = true
     }
     toast.error(error)
+  }
+}
+
+/**
+ * T3a: "Generate Response" button — calls the RAG endpoint with the
+ * full conversation transcript (so the LLM has the back-and-forth
+ * context, not just the last message) and drops the generated HTML
+ * into the editor.
+ *
+ * The conversation transcript is assembled client-side from the
+ * already-loaded messages: filters out private notes + activity
+ * rows, sorts oldest-first, strips HTML for token efficiency, and
+ * tags each turn with `Customer:` or `Agent:`. RAG-side prompt
+ * substitution treats this as the {{enquiry}} block.
+ *
+ * 400 with `ai:manage` permission redirects to a "configure your AI
+ * provider" toast — the OpenAI key prompt dialog is reserved for
+ * the lighter-weight aiCompletion path; the RAG flow needs more
+ * setup (knowledge sources) than a single key entry handles.
+ */
+const handleGenerateResponse = async () => {
+  isGenerating.value = true
+  try {
+    const messages = (conversationStore.conversationMessages || [])
+      .filter((m) => !m.private && m.content)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+
+    if (!messages.length) {
+      toast.error(t('replyBox.generateNoMessages'))
+      return
+    }
+
+    // Strip HTML — the AI prompt eats raw text more efficiently
+    // and we don't need markup at the LLM input layer.
+    const conversationText = messages
+      .map((m) => {
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = m.content || ''
+        const text = tempDiv.textContent || tempDiv.innerText || ''
+        const role = m.type === 'incoming' ? 'Customer' : 'Agent'
+        return `${role}: ${text.trim()}`
+      })
+      .join('\n\n')
+
+    if (!conversationText.trim()) {
+      toast.error(t('replyBox.generateEmpty'))
+      return
+    }
+
+    const resp = await api.ragGenerate({
+      conversation_id: conversationStore.current?.id,
+      customer_message: conversationText
+    })
+
+    const response = resp.data?.data?.response
+    if (response) {
+      // Provider responses sometimes mix HTML + raw newlines; if HTML
+      // is present we strip newlines (HTML provides structure),
+      // otherwise convert newlines to <br>.
+      htmlContent.value = /<[a-z][\s\S]*>/i.test(response)
+        ? response.replace(/\n+/g, '')
+        : response.replace(/\n/g, '<br>')
+      toast.success(t('replyBox.generateSuccess'))
+    }
+  } catch (error) {
+    if (error.response?.status === 400 && userStore.can('ai:manage')) {
+      toast.error(t('replyBox.generateConfigureAI'))
+    } else {
+      toast.error(error)
+    }
+  } finally {
+    isGenerating.value = false
   }
 }
 

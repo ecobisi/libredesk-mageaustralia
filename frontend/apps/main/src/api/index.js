@@ -511,6 +511,20 @@ const updateAIProvider = (data) => http.put('/api/v1/ai/provider', data, {
     'Content-Type': 'application/json'
   }
 })
+
+// T3a RAG knowledge sources + generate-response endpoint.
+const getRAGSources = () => http.get('/api/v1/rag/sources')
+const getRAGSource = (id) => http.get(`/api/v1/rag/sources/${id}`)
+const createRAGSource = (data) => http.post('/api/v1/rag/sources', data)
+const updateRAGSource = (id, data) => http.put(`/api/v1/rag/sources/${id}`, data)
+const deleteRAGSource = (id) => http.delete(`/api/v1/rag/sources/${id}`)
+const syncRAGSource = (id) => http.post(`/api/v1/rag/sources/${id}/sync`)
+const ragSearch = (data) => http.post('/api/v1/rag/search', data)
+const ragGenerate = (data) => http.post('/api/v1/rag/generate', data)
+const ragFileUpload = (formData) =>
+  http.post('/api/v1/rag/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 const getContactNotes = (id) => http.get(`/api/v1/contacts/${id}/notes`)
 const getContactConversations = (id) => http.get(`/api/v1/contacts/${id}/conversations`)
 const createContactNote = (id, data) => http.post(`/api/v1/contacts/${id}/notes`, data, {
@@ -672,6 +686,15 @@ export default {
   updateAutomationRuleWeights,
   updateAutomationRulesExecutionMode,
   updateAIProvider,
+  getRAGSources,
+  getRAGSource,
+  createRAGSource,
+  updateRAGSource,
+  deleteRAGSource,
+  syncRAGSource,
+  ragSearch,
+  ragGenerate,
+  ragFileUpload,
   createAutomationRule,
   toggleAutomationRule,
   deleteAutomationRule,

@@ -53,6 +53,19 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	// T3v AI feature settings (voicemail transcription toggles).
 	g.GET("/api/v1/settings/ai", perm(handleGetAISettings, "ai:manage"))
 	g.PUT("/api/v1/settings/ai", perm(handleUpdateAISettings, "ai:manage"))
+	// T3a RAG knowledge sources + generate-response endpoint.
+	// Source CRUD is admin-only (`ai:manage`); the generate path is
+	// surfaced to anyone with `conversations:write` so agents can
+	// draft AI replies. T3i may relax this further.
+	g.GET("/api/v1/rag/sources", perm(handleGetRAGSources, "ai:manage"))
+	g.GET("/api/v1/rag/sources/{id}", perm(handleGetRAGSource, "ai:manage"))
+	g.POST("/api/v1/rag/sources", perm(handleCreateRAGSource, "ai:manage"))
+	g.PUT("/api/v1/rag/sources/{id}", perm(handleUpdateRAGSource, "ai:manage"))
+	g.DELETE("/api/v1/rag/sources/{id}", perm(handleDeleteRAGSource, "ai:manage"))
+	g.POST("/api/v1/rag/sources/{id}/sync", perm(handleSyncRAGSource, "ai:manage"))
+	g.POST("/api/v1/rag/upload", perm(handleRAGFileUpload, "ai:manage"))
+	g.POST("/api/v1/rag/search", perm(handleRAGSearch, "ai:manage"))
+	g.POST("/api/v1/rag/generate", perm(handleRAGGenerateResponse, "conversations:write"))
 
 	// OpenID connect single sign-on.
 	g.GET("/api/v1/oidc", perm(handleGetAllOIDC, "oidc:manage"))
