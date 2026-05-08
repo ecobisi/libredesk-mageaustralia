@@ -421,16 +421,30 @@ func (m *Manager) GenerateEmbedding(text string) ([]float32, error) {
 // admin-configured template, so it needs a way to bypass the prompt
 // table.
 func (m *Manager) CompletionWithSystemPrompt(systemPrompt, userPrompt string) (string, error) {
+	return m.CompletionWithPayload(PromptPayload{
+		SystemPrompt: systemPrompt,
+		UserPrompt:   userPrompt,
+	})
+}
+
+// CompletionWithPayload sends a fully-assembled PromptPayload (which
+// may include multimodal Images) to the default provider. T3e — RAG
+// generate calls this when conversation attachments yielded resized
+// images so the LLM can examine the screenshots the customer sent.
+//
+// Error envelope shape mirrors CompletionWithSystemPrompt — the two
+// share their failure modes (provider lookup, decryption, key, network)
+// and an admin re-saving the API key fixes either path. Kept as the
+// "real" implementation; CompletionWithSystemPrompt now delegates so
+// the text-only call path remains a one-liner.
+func (m *Manager) CompletionWithPayload(payload PromptPayload) (string, error) {
 	client, err := m.getDefaultProviderClient()
 	if err != nil {
 		m.lo.Error("error getting provider client", "error", err)
 		return "", err
 	}
 
-	response, err := client.SendPrompt(PromptPayload{
-		SystemPrompt: systemPrompt,
-		UserPrompt:   userPrompt,
-	})
+	response, err := client.SendPrompt(payload)
 	if err != nil {
 		if errors.Is(err, ErrInvalidAPIKey) {
 			m.lo.Error("error invalid API key", "error", err)

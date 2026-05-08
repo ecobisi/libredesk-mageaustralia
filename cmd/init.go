@@ -983,7 +983,9 @@ func initAI(db *sqlx.DB, i18n *i18n.I18n) *ai.Manager {
 // initRAG inits the RAG manager. The embedding callback closes over
 // aiMgr so a freshly-saved OpenAI key takes effect on the next
 // embed-call without a restart (matches the TranscribeFunc wiring
-// pattern in main.go).
+// pattern in main.go). The media-blob callback is wired similarly so
+// T3e's GetConversationImages can pull image attachments without an
+// import cycle from internal/rag → internal/media.
 //
 // scanSQLFile against the rag_* tables will fail at boot if the host
 // lacks the pgvector extension and v2.2.15 therefore skipped the table
@@ -991,13 +993,14 @@ func initAI(db *sqlx.DB, i18n *i18n.I18n) *ai.Manager {
 // missing extension rather than booting half-broken. Hosts who don't
 // want RAG and can't install pgvector can comment this out — none of
 // the RAG routes are required for the rest of the app to function.
-func initRAG(db *sqlx.DB, i18n *i18n.I18n, aiMgr *ai.Manager) *rag.Manager {
+func initRAG(db *sqlx.DB, i18n *i18n.I18n, aiMgr *ai.Manager, mediaMgr *media.Manager) *rag.Manager {
 	lo := initLogger("rag")
 	m, err := rag.New(rag.Opts{
 		DB:            db,
 		Lo:            lo,
 		I18n:          i18n,
 		EmbeddingFunc: aiMgr.GenerateEmbedding,
+		MediaBlobFunc: mediaMgr.GetBlob,
 	})
 	if err != nil {
 		log.Fatalf("error initializing RAG manager: %v", err)

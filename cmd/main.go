@@ -250,7 +250,7 @@ func main() {
 		// RAG sync coordinator can hold a stable reference to it. Same
 		// reasoning as aiMgr above.
 		macroMgr   = initMacro(db, i18n)
-		ragMgr     = initRAG(db, i18n, aiMgr)
+		ragMgr     = initRAG(db, i18n, aiMgr, media)
 		ragSyncMgr = initRAGSync(ragMgr, macroMgr)
 	)
 

@@ -10,12 +10,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/abhinavxd/libredesk/internal/ai"
 	"github.com/abhinavxd/libredesk/internal/envelope"
 	"github.com/abhinavxd/libredesk/internal/rag/models"
 	settingmodels "github.com/abhinavxd/libredesk/internal/setting/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
+
+// DefaultMaxRAGImages is the upper bound on conversation images the
+// multimodal generate path includes (T3e). 3 is the v1.0.3-tuned value
+// that keeps token-cost for "low" detail tier images bounded for typical
+// support threads while still capturing the customer's most recent few
+// screenshots.
+const DefaultMaxRAGImages = 3
 
 // T3d external-search-API integration types.
 //
@@ -294,6 +302,30 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 	}
 	app.lo.Info("RAG generate response", "results_count", len(results), "threshold", threshold)
 
+	// T3e: pull image attachments from the conversation, resize, and
+	// shape into ImageContent slots for the multimodal payload.
+	// Failure here does NOT fail the whole generate call — vision
+	// support is additive context, the LLM can still draft a reply
+	// from the text. Skipped entirely when conversation_id was not
+	// supplied (admin "Test Knowledge Base" search hits this handler
+	// with conversation_id=0).
+	var aiImages []ai.ImageContent
+	if req.ConversationID > 0 {
+		images, err := app.rag.GetConversationImages(req.ConversationID, DefaultMaxRAGImages)
+		if err != nil {
+			app.lo.Warn("failed to get conversation images, continuing without", "conversation_id", req.ConversationID, "error", err)
+		} else if len(images) > 0 {
+			aiImages = make([]ai.ImageContent, 0, len(images))
+			for _, img := range images {
+				aiImages = append(aiImages, ai.ImageContent{
+					URL:      img.DataURL,
+					Filename: img.Filename,
+				})
+			}
+			app.lo.Info("conversation images extracted for AI", "conversation_id", req.ConversationID, "count", len(aiImages))
+		}
+	}
+
 	// T3d: optionally augment the prompt with results from an external
 	// HTTP search API. Two-step pipeline: classify the customer message
 	// into search intents (product / category / faq / …), then fan out
@@ -355,7 +387,21 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{{external_search_results}}", externalSearchContext)
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{{enquiry}}", req.CustomerMessage)
 
-	response, err := app.ai.CompletionWithSystemPrompt(systemPrompt, req.CustomerMessage)
+	// T3e: nudge the LLM to actually look at the attached images. Models
+	// that ignore image_url parts (no-vision models on OpenRouter) lose
+	// nothing from this prompt addition; vision-capable models gain a
+	// directive to reference what they see. Appended after all template
+	// substitutions so admin-edited prompts still get the directive when
+	// images are present.
+	if len(aiImages) > 0 {
+		systemPrompt += "\n\nNote: The customer has attached images to this conversation. Please examine them and reference relevant details in your response."
+	}
+
+	response, err := app.ai.CompletionWithPayload(ai.PromptPayload{
+		SystemPrompt: systemPrompt,
+		UserPrompt:   req.CustomerMessage,
+		Images:       aiImages,
+	})
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}

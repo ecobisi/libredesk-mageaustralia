@@ -59,12 +59,44 @@ func (o *OpenRouterClient) SendPrompt(payload PromptPayload) (string, error) {
 	}
 
 	apiURL := "https://openrouter.ai/api/v1/chat/completions"
+
+	// Multimodal-capable wire shape. OpenRouter pass-through is
+	// OpenAI-compatible (T3b note (i)) so the image_url + detail:low
+	// shape lands at whichever upstream the admin selected — Anthropic
+	// Claude 3.x, Google Gemini, OpenAI vision models all accept it.
+	// Models without vision ignore the image parts; the request still
+	// completes against the text content.
+	messages := []interface{}{
+		map[string]string{"role": "system", "content": payload.SystemPrompt},
+	}
+
+	if len(payload.Images) > 0 {
+		content := []map[string]interface{}{
+			{"type": "text", "text": payload.UserPrompt},
+		}
+		for _, img := range payload.Images {
+			content = append(content, map[string]interface{}{
+				"type": "image_url",
+				"image_url": map[string]string{
+					"url":    img.URL,
+					"detail": "low",
+				},
+			})
+		}
+		messages = append(messages, map[string]interface{}{
+			"role":    "user",
+			"content": content,
+		})
+	} else {
+		messages = append(messages, map[string]string{
+			"role":    "user",
+			"content": payload.UserPrompt,
+		})
+	}
+
 	requestBody := map[string]interface{}{
-		"model": o.model,
-		"messages": []map[string]string{
-			{"role": "system", "content": payload.SystemPrompt},
-			{"role": "user", "content": payload.UserPrompt},
-		},
+		"model":       o.model,
+		"messages":    messages,
 		"max_tokens":  1024,
 		"temperature": 0.7,
 	}

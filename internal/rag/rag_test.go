@@ -1,7 +1,10 @@
 package rag
 
 import (
+	"io"
 	"testing"
+
+	"github.com/zerodha/logf"
 )
 
 func TestHashContent(t *testing.T) {
@@ -69,5 +72,22 @@ func TestFloat32SliceToVectorPgvectorShape(t *testing.T) {
 	result := Float32SliceToVector([]float32{0.1, 0.2, 0.3})
 	if result[0] != '[' || result[len(result)-1] != ']' {
 		t.Errorf("must be bracket-enclosed: %q", result)
+	}
+}
+
+// TestGetConversationImagesNilMediaBlobFunc — when the manager has no
+// mediaBlobFunc wired, the multimodal pipeline must degrade gracefully
+// to a text-only prompt rather than tripping a nil-deref. cmd/rag.go's
+// generate handler treats (nil, nil) as "no images", so the contract
+// here is the empty-slice-no-error return.
+func TestGetConversationImagesNilMediaBlobFunc(t *testing.T) {
+	lo := logf.New(logf.Opts{Writer: io.Discard})
+	m := &Manager{lo: &lo}
+	images, err := m.GetConversationImages(123, 3)
+	if err != nil {
+		t.Errorf("expected nil error when mediaBlobFunc is nil, got %v", err)
+	}
+	if len(images) != 0 {
+		t.Errorf("expected no images, got %d", len(images))
 	}
 }

@@ -30,9 +30,28 @@ const (
 const defaultOpenRouterModel = "anthropic/claude-3-haiku"
 
 // PromptPayload represents the structured input for an LLM provider.
+//
+// Images is optional. Populated by the RAG generate handler (T3e) for
+// vision-capable models — providers that don't recognise image_url
+// parts ignore them gracefully (OpenAI gpt-4o-mini handles both, and
+// OpenRouter routes the same shape to whichever upstream model is
+// selected). Empty Images keeps the wire shape identical to v2's
+// pre-T3e text-only payload — no behaviour change for the unmodified
+// path.
 type PromptPayload struct {
-	SystemPrompt string `json:"system_prompt"`
-	UserPrompt   string `json:"user_prompt"`
+	SystemPrompt string         `json:"system_prompt"`
+	UserPrompt   string         `json:"user_prompt"`
+	Images       []ImageContent `json:"images,omitempty"`
+}
+
+// ImageContent is one image slot in a multimodal prompt. URL is
+// either a base64 data URL (data:image/jpeg;base64,...) or an HTTP
+// URL the LLM provider can fetch directly. The RAG pipeline produces
+// data URLs after passing the source through internal/image to cap
+// the dimensions and normalise the encoding.
+type ImageContent struct {
+	URL      string `json:"url"`
+	Filename string `json:"filename"`
 }
 
 // ProviderInfo is the public-facing shape returned to the admin UI for

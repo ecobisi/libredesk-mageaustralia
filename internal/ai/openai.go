@@ -38,12 +38,50 @@ func (o *OpenAIClient) SendPrompt(payload PromptPayload) (string, error) {
 	}
 
 	apiURL := "https://api.openai.com/v1/chat/completions"
+
+	// Build the messages array. Text-only payloads keep the original
+	// `content: string` shape — OpenAI accepts both wire forms but the
+	// string variant is cheaper to parse and makes captures in HTTP
+	// recordings (e.g. for tests) more readable. Multimodal payloads
+	// switch to the `content: [parts]` array, which is the only way
+	// OpenAI accepts image_url alongside text in the same turn.
+	messages := []interface{}{
+		map[string]string{"role": "system", "content": payload.SystemPrompt},
+	}
+
+	if len(payload.Images) > 0 {
+		// "low" detail tier is the right call for our use case: the
+		// images are already capped at 500px on the long side
+		// (internal/image.MaxAIDimension), and "low" maps to 85 tokens
+		// per image regardless of resolution — vs "high" which scales
+		// with the image and would burn token budget on each
+		// screenshot in a multi-image support thread.
+		content := []map[string]interface{}{
+			{"type": "text", "text": payload.UserPrompt},
+		}
+		for _, img := range payload.Images {
+			content = append(content, map[string]interface{}{
+				"type": "image_url",
+				"image_url": map[string]string{
+					"url":    img.URL,
+					"detail": "low",
+				},
+			})
+		}
+		messages = append(messages, map[string]interface{}{
+			"role":    "user",
+			"content": content,
+		})
+	} else {
+		messages = append(messages, map[string]string{
+			"role":    "user",
+			"content": payload.UserPrompt,
+		})
+	}
+
 	requestBody := map[string]interface{}{
-		"model": "gpt-4o-mini",
-		"messages": []map[string]string{
-			{"role": "system", "content": payload.SystemPrompt},
-			{"role": "user", "content": payload.UserPrompt},
-		},
+		"model":       "gpt-4o-mini",
+		"messages":    messages,
 		"max_tokens":  1024,
 		"temperature": 0.7,
 	}

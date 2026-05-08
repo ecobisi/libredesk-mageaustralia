@@ -10,15 +10,18 @@
 package rag
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/abhinavxd/libredesk/internal/dbutil"
 	"github.com/abhinavxd/libredesk/internal/envelope"
+	"github.com/abhinavxd/libredesk/internal/image"
 	"github.com/abhinavxd/libredesk/internal/rag/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/knadh/go-i18n"
@@ -35,17 +38,39 @@ var (
 // per-call lookup picks up provider-config changes without a restart.
 type EmbeddingFunc func(text string) ([]float32, error)
 
+// MediaBlobFunc retrieves the raw binary content of a media file by
+// UUID. Wired in cmd/init.go to media.Manager.GetBlob so the RAG
+// pipeline can pull conversation image attachments without taking a
+// hard dependency on the media package (avoids an import cycle and
+// keeps the rag manager testable with an in-memory blob source).
+type MediaBlobFunc func(uuid string) ([]byte, error)
+
+// ConversationImage represents an image attachment from a conversation,
+// already resized + base64-encoded ready for an OpenAI/OpenRouter
+// chat-completion image_url field.
+type ConversationImage struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	DataURL     string `json:"data_url"`
+}
+
 // Manager handles RAG storage + retrieval. The embedding callback is set
 // at init time but can be swapped via SetEmbeddingFunc (used by tests).
 // Every search and AddDocument call is gated on a non-nil embeddingFunc;
 // callers without an OpenAI key configured surface a clean error instead
 // of a nil-deref.
+//
+// mediaBlobFunc is optional — when nil (e.g. tests, or hosts running
+// without the media manager wired) GetConversationImages returns nil
+// rather than failing, so the RAG pipeline degrades gracefully to a
+// text-only multimodal prompt.
 type Manager struct {
 	q             queries
 	db            *sqlx.DB
 	lo            *logf.Logger
 	i18n          *i18n.I18n
 	embeddingFunc EmbeddingFunc
+	mediaBlobFunc MediaBlobFunc
 }
 
 type queries struct {
@@ -68,6 +93,7 @@ type Opts struct {
 	Lo            *logf.Logger
 	I18n          *i18n.I18n
 	EmbeddingFunc EmbeddingFunc
+	MediaBlobFunc MediaBlobFunc
 }
 
 // New creates a new RAG manager. ScanSQLFile may fail at boot if the
@@ -86,6 +112,7 @@ func New(opts Opts) (*Manager, error) {
 		lo:            opts.Lo,
 		i18n:          opts.I18n,
 		embeddingFunc: opts.EmbeddingFunc,
+		mediaBlobFunc: opts.MediaBlobFunc,
 	}, nil
 }
 
@@ -93,6 +120,12 @@ func New(opts Opts) (*Manager, error) {
 // wires the callback once via Opts.
 func (m *Manager) SetEmbeddingFunc(fn EmbeddingFunc) {
 	m.embeddingFunc = fn
+}
+
+// SetMediaBlobFunc swaps the media-blob callback. Used by tests;
+// production wires the callback once via Opts.
+func (m *Manager) SetMediaBlobFunc(fn MediaBlobFunc) {
+	m.mediaBlobFunc = fn
 }
 
 // GetDB returns the underlying sqlx handle so the sync subpackage can
@@ -293,4 +326,97 @@ func Float32SliceToVector(v []float32) string {
 	}
 	result += "]"
 	return result
+}
+
+// mediaAttachment is the SELECT shape used by GetConversationImages.
+// Lightweight, intentionally not promoted to models/ — only this one
+// callsite needs it.
+type mediaAttachment struct {
+	UUID        string `db:"uuid"`
+	Filename    string `db:"filename"`
+	ContentType string `db:"content_type"`
+}
+
+// GetConversationImages extracts up to maxImages image attachments
+// from a conversation's messages, resizes each to MaxAIDimension via
+// internal/image, and returns base64 data URLs ready to drop into a
+// multimodal AI prompt's image_url field.
+//
+// Newest images first (image-rich support threads usually attach
+// screenshots in the latest message). Per-image failures are logged
+// and skipped — one corrupt PNG shouldn't blank the whole multimodal
+// payload. Returns nil (not error) when the manager has no
+// mediaBlobFunc wired so callers in test/sandbox setups don't trip a
+// nil-deref.
+//
+// The query joins media → conversation_messages on the same
+// `model_type='messages'` polymorphic-association convention used
+// elsewhere in the codebase. created_at on conversation_messages is
+// the per-message ordering anchor; media.created_at acts as the
+// tie-breaker for messages with multiple attachments.
+func (m *Manager) GetConversationImages(conversationID int, maxImages int) ([]ConversationImage, error) {
+	if m.mediaBlobFunc == nil {
+		m.lo.Warn("media blob function not configured, skipping image extraction")
+		return nil, nil
+	}
+
+	if maxImages <= 0 {
+		// Default cap matches DefaultMaxRAGImages in cmd/rag.go — kept
+		// here too so direct callers (tests) get the same behaviour.
+		maxImages = 3
+	}
+
+	const query = `
+		SELECT m.uuid, m.filename, m.content_type
+		FROM media m
+		INNER JOIN conversation_messages cm ON m.model_type = 'messages' AND m.model_id = cm.id
+		WHERE cm.conversation_id = $1
+			AND m.content_type LIKE 'image/%'
+		ORDER BY cm.created_at DESC, m.created_at DESC
+		LIMIT $2
+	`
+
+	var attachments []mediaAttachment
+	if err := m.db.Select(&attachments, query, conversationID, maxImages); err != nil {
+		m.lo.Error("error fetching conversation images", "conversation_id", conversationID, "error", err)
+		return nil, fmt.Errorf("fetching conversation images: %w", err)
+	}
+
+	if len(attachments) == 0 {
+		return nil, nil
+	}
+
+	m.lo.Info("found conversation images", "conversation_id", conversationID, "count", len(attachments))
+
+	images := make([]ConversationImage, 0, len(attachments))
+	for _, att := range attachments {
+		// Defensive — the SQL filter already constrains to image/*, but
+		// re-check before handing to the decoder so a stray non-image
+		// row (manually-injected DB state) can't poison the loop.
+		if !strings.HasPrefix(att.ContentType, "image/") {
+			continue
+		}
+
+		blob, err := m.mediaBlobFunc(att.UUID)
+		if err != nil {
+			m.lo.Warn("failed to get image blob, skipping", "uuid", att.UUID, "filename", att.Filename, "error", err)
+			continue
+		}
+
+		dataURL, err := image.ResizeAndEncodeForAI(bytes.NewReader(blob), att.ContentType)
+		if err != nil {
+			m.lo.Warn("failed to resize image, skipping", "uuid", att.UUID, "filename", att.Filename, "error", err)
+			continue
+		}
+
+		images = append(images, ConversationImage{
+			Filename:    att.Filename,
+			ContentType: att.ContentType,
+			DataURL:     dataURL,
+		})
+	}
+
+	m.lo.Info("processed conversation images", "conversation_id", conversationID, "processed", len(images))
+
+	return images, nil
 }
