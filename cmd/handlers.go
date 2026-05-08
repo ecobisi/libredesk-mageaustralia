@@ -23,6 +23,10 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.GET("/logout", auth(handleLogout))
 	g.GET("/api/v1/oidc/{id}/login", rateLimit(handleOIDCLogin, "auth"))
 	g.GET("/api/v1/oidc/{id}/finish", rateLimit(handleOIDCCallback, "auth"))
+	// T3ac Mobile Google Sign-In: Flutter app exchanges a Google ID token
+	// for a libredesk API key for stateless mobile auth (no cookie/CSRF).
+	// Unauthenticated by design — the Google ID token is the auth proof.
+	g.POST("/api/v1/auth/google-mobile", rateLimit(handleGoogleMobileAuth, "auth"))
 
 	// i18n.
 	g.GET("/api/v1/lang", handleGetAvailableLanguages)

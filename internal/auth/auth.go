@@ -74,6 +74,15 @@ type Auth struct {
 	logger     *logf.Logger
 	rd         *redis.Client
 	httpClient *http.Client
+
+	// googleVerifier is a lazily-initialised verifier for Google ID tokens
+	// minted by the Flutter mobile app's native Sign-In SDK. Distinct from
+	// the per-provider `verifiers` map (those are tied to admin-configured
+	// OIDC entries and use this server's client_id as audience). This one
+	// accepts any audience signed by Google (SkipClientIDCheck=true) so the
+	// mobile app can ship its own Google project's client_id without
+	// requiring a matching OIDC row in the database.
+	googleVerifier *oidc.IDTokenVerifier
 }
 
 // newSSRFGuardedClient builds an *http.Client whose dialer rejects connections
@@ -224,6 +233,11 @@ func (a *Auth) Reload(cfg Config) error {
 	a.cfg = cfg
 	a.oauthCfgs = oauthCfgs
 	a.verifiers = verifiers
+	if a.httpClient != httpClient {
+		// Drop the cached Google verifier so it's rebuilt against the new
+		// client on the next mobile-auth call.
+		a.googleVerifier = nil
+	}
 	a.httpClient = httpClient
 
 	return nil
@@ -297,6 +311,70 @@ func (a *Auth) ExchangeOIDCToken(ctx context.Context, providerID int, code strin
 		return "", OIDCclaim{}, errors.New("error getting user from OIDC")
 	}
 	return rawIDTk, claims, nil
+}
+
+// googleIssuer is the OIDC issuer URL Google publishes for ID tokens minted
+// by both the web Sign-In flow and the native mobile SDKs.
+const googleIssuer = "https://accounts.google.com"
+
+// VerifyGoogleIDToken verifies a Google-issued OIDC ID token and returns its
+// claims. Used by the mobile auth endpoint (POST /api/v1/auth/google-mobile)
+// to validate tokens from the Flutter app's native Google Sign-In before
+// issuing an API key.
+//
+// SkipClientIDCheck is intentionally true: the mobile app uses its own
+// platform-specific Google OAuth client ID (one for Android, another for
+// iOS) and we don't want every fork to have to enumerate them in config.
+// Signature verification against Google's JWKS already proves the token
+// came from Google; the email_verified claim then proves the user controls
+// the address; agent lookup then proves they're authorised on this server.
+//
+// The verifier is lazily created on first call and reused on subsequent
+// calls. Discovery + JWKS fetching go through the SSRF-guarded http.Client.
+func (a *Auth) VerifyGoogleIDToken(ctx context.Context, idToken string) (OIDCclaim, error) {
+	a.mu.RLock()
+	verifier := a.googleVerifier
+	httpClient := a.httpClient
+	a.mu.RUnlock()
+
+	if verifier == nil {
+		a.mu.Lock()
+		// Double-check after acquiring the write lock — another goroutine
+		// may have built the verifier while we waited.
+		if a.googleVerifier == nil {
+			discoveryCtx := context.Background()
+			if httpClient != nil {
+				discoveryCtx = oidc.ClientContext(discoveryCtx, httpClient)
+			}
+			provider, err := oidc.NewProvider(discoveryCtx, googleIssuer)
+			if err != nil {
+				a.mu.Unlock()
+				a.logger.Error("error initializing Google OIDC provider for mobile auth", "error", err)
+				return OIDCclaim{}, fmt.Errorf("error initializing Google OIDC provider: %w", err)
+			}
+			a.googleVerifier = provider.Verifier(&oidc.Config{SkipClientIDCheck: true})
+		}
+		verifier = a.googleVerifier
+		a.mu.Unlock()
+	}
+
+	// Route the JWKS fetch through the SSRF-guarded client so cert refreshes
+	// can't be redirected to internal hosts.
+	verifyCtx := ctx
+	if httpClient != nil {
+		verifyCtx = oidc.ClientContext(ctx, httpClient)
+	}
+
+	idTk, err := verifier.Verify(verifyCtx, idToken)
+	if err != nil {
+		return OIDCclaim{}, fmt.Errorf("error verifying Google ID token: %w", err)
+	}
+
+	var claims OIDCclaim
+	if err := idTk.Claims(&claims); err != nil {
+		return OIDCclaim{}, errors.New("error extracting claims from Google ID token")
+	}
+	return claims, nil
 }
 
 // SaveSession creates and sets a session (post successful login/auth).
