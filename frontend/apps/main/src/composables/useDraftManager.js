@@ -186,7 +186,12 @@ export function useDraftManager (key, uploadedFiles = null) {
       }
 
       htmlContent.value = content
-      textContent.value = ''
+      // Derive text content so reactive predicates (enableSend,
+      // hasDraftContent → Delete-draft button v-if) don't wait for the
+      // editor's first onUpdate keystroke to register that the draft
+      // has text. Without this, Send stays disabled and Delete is
+      // not rendered on draft load until the agent presses any key.
+      textContent.value = getTextFromHTML(content)
       loadedAttachments.value = validateAttachments(meta.attachments)
       loadedMacroActions.value = validateMacroActions(meta.macro_actions)
     } catch (error) {
