@@ -1138,8 +1138,17 @@ func (m *Manager) ProcessIncomingMessage(in models.IncomingMessage) (models.Mess
 	// T3v: kick off voicemail transcription for any audio attachments.
 	// No-op when transcription is disabled in AI settings (default state).
 	// Each provider runs async internally so this call is fire-and-forget.
-	if len(msg.Media) > 0 {
-		m.transcribeAudioAttachments(msg.ConversationUUID, msg.Media)
+	//
+	// T3w: InsertMessage uses sqlx.Get with RETURNING * which scans the DB
+	// result back into the Message struct, zeroing the in-memory Media slice.
+	// Re-fetch media from DB via GetByModel after insert instead of relying
+	// on the in-memory slice — without this, the transcription check sees
+	// media_count=0 and skips on every new message.
+	if len(msg.Attachments) > 0 {
+		msgMedia, mediaErr := m.mediaStore.GetByModel(msg.ID, mmodels.ModelMessages)
+		if mediaErr == nil && len(msgMedia) > 0 {
+			m.transcribeAudioAttachments(msg.ConversationUUID, msgMedia)
+		}
 	}
 
 	// Process post-message hooks (automation rules, webhooks, SLA, etc.).
