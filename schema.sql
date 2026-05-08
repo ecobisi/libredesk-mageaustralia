@@ -1,5 +1,13 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
+-- T3a: pgvector enables semantic-search over the rag_documents table. Hosts
+-- without the extension can still install the rest of the schema; the rag_*
+-- tables below are guarded by CREATE EXTENSION succeeding via the
+-- v2.2.15 migration path. Fresh installs rely on the docker-compose.yml
+-- pgvector/pgvector:pg17 image; manual installs need
+-- `apt install postgresql-17-pgvector` (Debian) or equivalent.
+CREATE EXTENSION IF NOT EXISTS vector;
+
 DROP TYPE IF EXISTS "channels" CASCADE; CREATE TYPE "channels" AS ENUM ('email', 'livechat');
 DROP TYPE IF EXISTS "message_type" CASCADE; CREATE TYPE "message_type" AS ENUM ('incoming','outgoing','activity');
 DROP TYPE IF EXISTS "message_sender_type" CASCADE; CREATE TYPE "message_sender_type" AS ENUM ('agent','contact');
@@ -622,6 +630,45 @@ CREATE TABLE ai_prompts (
 );
 CREATE INDEX index_ai_prompts_on_key ON ai_prompts USING btree (key);
 
+-- T3a: RAG knowledge sources + indexed document chunks. embedding column is
+-- vector(1536) for OpenAI text-embedding-3-small (the default we ship). The
+-- hnsw index uses vector_cosine_ops because the search path orders by
+-- `embedding <=> $1` (cosine distance). Partial unique on (source_id,
+-- source_ref) for the upsert-on-sync path which keys on source_ref but
+-- allows NULLs for bare documents not tied to an external ref.
+DROP TABLE IF EXISTS rag_sources CASCADE;
+CREATE TABLE rag_sources (
+	id SERIAL PRIMARY KEY,
+	created_at TIMESTAMPTZ DEFAULT NOW(),
+	updated_at TIMESTAMPTZ DEFAULT NOW(),
+	name TEXT NOT NULL,
+	source_type TEXT NOT NULL,
+	config JSONB DEFAULT '{}'::jsonb NOT NULL,
+	enabled BOOL DEFAULT TRUE NOT NULL,
+	last_synced_at TIMESTAMPTZ NULL,
+	CONSTRAINT constraint_rag_sources_on_name CHECK (length(name) <= 255),
+	CONSTRAINT constraint_rag_sources_on_source_type CHECK (source_type IN ('macro', 'webpage', 'file', 'custom'))
+);
+
+DROP TABLE IF EXISTS rag_documents CASCADE;
+CREATE TABLE rag_documents (
+	id SERIAL PRIMARY KEY,
+	created_at TIMESTAMPTZ DEFAULT NOW(),
+	updated_at TIMESTAMPTZ DEFAULT NOW(),
+	source_id INT REFERENCES rag_sources(id) ON DELETE CASCADE NOT NULL,
+	source_ref TEXT NULL,
+	title TEXT NOT NULL,
+	content TEXT NOT NULL,
+	content_hash TEXT NOT NULL,
+	embedding vector(1536),
+	metadata JSONB DEFAULT '{}'::jsonb NOT NULL,
+	CONSTRAINT constraint_rag_documents_on_title CHECK (length(title) <= 500)
+);
+CREATE INDEX index_rag_documents_on_embedding ON rag_documents USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX index_rag_documents_on_source_id ON rag_documents(source_id);
+CREATE INDEX index_rag_documents_on_content_hash ON rag_documents(content_hash);
+CREATE UNIQUE INDEX index_unique_rag_documents_on_source_id_source_ref ON rag_documents(source_id, source_ref) WHERE source_ref IS NOT NULL;
+
 DROP TABLE IF EXISTS custom_attribute_definitions CASCADE;
 CREATE TABLE custom_attribute_definitions (
 	id SERIAL PRIMARY KEY,
@@ -782,7 +829,12 @@ VALUES
     ('trash.auto_delete_days', '30'::jsonb),
     ('trash.activity_purge_days', '7'::jsonb),
     ('ai.transcription_enabled', 'false'::jsonb),
-    ('ai.transcription_provider', '"local"'::jsonb);
+    ('ai.transcription_provider', '"local"'::jsonb),
+    ('ai.enabled', 'false'::jsonb),
+    ('ai.embedding_model', '"text-embedding-3-small"'::jsonb),
+    ('ai.system_prompt', '""'::jsonb),
+    ('ai.max_context_chunks', '5'::jsonb),
+    ('ai.similarity_threshold', '0.25'::jsonb);
 
 -- Default conversation priorities
 INSERT INTO conversation_priorities (name) VALUES

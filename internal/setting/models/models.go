@@ -54,11 +54,9 @@ type PCISettings struct {
 	NotifyMethod  string `json:"pci.notify_method" db:"pci.notify_method"`
 }
 
-// AISettings holds AI feature toggles. Currently scoped to T3v voicemail
-// transcription — the rest of v1.0.3's AI surface (RAG, knowledge sources,
-// external search, per-inbox prompts) lives behind T3a/T3b which haven't
-// been ported yet. New AI fields land here as the relevant tier-3 units
-// arrive.
+// AISettings holds AI feature toggles + RAG (Retrieval-Augmented Generation)
+// configuration. Originally scoped to T3v voicemail transcription; T3a
+// extended it with RAG knobs for the "Generate Response" pipeline.
 //
 // TranscriptionEnabled gates the on-ingest audio-attachment hook in the
 // conversation package. TranscriptionProvider selects the backend:
@@ -71,7 +69,31 @@ type PCISettings struct {
 //
 // Empty TranscriptionProvider with TranscriptionEnabled=true is treated as
 // "local" by the orchestrator (matches v1.0.3 default).
+//
+// T3a RAG fields:
+//
+//   - Enabled is a coarse toggle for the RAG feature surface (settings UI,
+//     "Generate Response" button) — independent of transcription.
+//   - EmbeddingModel selects the OpenAI embeddings model. Defaults to
+//     "text-embedding-3-small" (1536 dims, the size the rag_documents.embedding
+//     column was built for). Changing this without rebuilding the table will
+//     fail at insert time.
+//   - SystemPrompt is the template fed to the LLM. Empty string falls back
+//     to a built-in default in cmd/rag.go. Supports {{site_name}}, {{context}},
+//     {{macros}}, {{enquiry}} substitutions.
+//   - MaxContextChunks bounds how many top-similarity rows feed the prompt.
+//     0 falls back to 5 in the handler.
+//   - SimilarityThreshold filters out low-quality matches (cosine similarity
+//     0..1, higher = more similar). 0 or >0.5 falls back to 0.25 — the v1.0.3
+//     production-tuned default that catches paraphrased queries while
+//     rejecting obviously-unrelated chunks. Tightening past 0.5 risks empty
+//     results on legitimate questions.
 type AISettings struct {
-	TranscriptionEnabled  bool   `json:"ai.transcription_enabled" db:"ai.transcription_enabled"`
-	TranscriptionProvider string `json:"ai.transcription_provider" db:"ai.transcription_provider"`
+	TranscriptionEnabled  bool    `json:"ai.transcription_enabled" db:"ai.transcription_enabled"`
+	TranscriptionProvider string  `json:"ai.transcription_provider" db:"ai.transcription_provider"`
+	Enabled               bool    `json:"ai.enabled" db:"ai.enabled"`
+	EmbeddingModel        string  `json:"ai.embedding_model" db:"ai.embedding_model"`
+	SystemPrompt          string  `json:"ai.system_prompt" db:"ai.system_prompt"`
+	MaxContextChunks      int     `json:"ai.max_context_chunks" db:"ai.max_context_chunks"`
+	SimilarityThreshold   float64 `json:"ai.similarity_threshold" db:"ai.similarity_threshold"`
 }

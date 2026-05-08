@@ -21,8 +21,14 @@ services:
     command: [sh, -c, "./libredesk --install --idempotent-install --yes --config /libredesk/config.toml && ./libredesk --upgrade --yes --config /libredesk/config.toml && ./libredesk --config /libredesk/config.toml"]
 
   # PostgreSQL database
+  # T3a: Switched from postgres:17-alpine to pgvector/pgvector:pg17 so the
+  # vector extension is available out of the box for RAG semantic search.
+  # Existing data volumes are compatible — pgvector ships the same Postgres
+  # 17 server with the extension pre-built. Hosts running stock postgres:17
+  # without pgvector will skip the rag_* tables during migration but the
+  # rest of the app installs cleanly; see internal/migrations/v2.2.15.go.
   db:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17
     container_name: libredesk_db
     restart: unless-stopped
     networks:
