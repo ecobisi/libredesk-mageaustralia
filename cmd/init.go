@@ -39,6 +39,8 @@ import (
 	notifier "github.com/abhinavxd/libredesk/internal/notification"
 	emailnotifier "github.com/abhinavxd/libredesk/internal/notification/providers/email"
 	"github.com/abhinavxd/libredesk/internal/oidc"
+	"github.com/abhinavxd/libredesk/internal/rag"
+	ragsync "github.com/abhinavxd/libredesk/internal/rag/sync"
 	"github.com/abhinavxd/libredesk/internal/ratelimit"
 	"github.com/abhinavxd/libredesk/internal/report"
 	"github.com/abhinavxd/libredesk/internal/role"
@@ -972,6 +974,46 @@ func initAI(db *sqlx.DB, i18n *i18n.I18n) *ai.Manager {
 		log.Fatalf("error initializing AI manager: %v", err)
 	}
 	return m
+}
+
+// initRAG inits the RAG manager. The embedding callback closes over
+// aiMgr so a freshly-saved OpenAI key takes effect on the next
+// embed-call without a restart (matches the TranscribeFunc wiring
+// pattern in main.go).
+//
+// scanSQLFile against the rag_* tables will fail at boot if the host
+// lacks the pgvector extension and v2.2.15 therefore skipped the table
+// creation; that's surfaced as a fatal so the operator fixes the
+// missing extension rather than booting half-broken. Hosts who don't
+// want RAG and can't install pgvector can comment this out — none of
+// the RAG routes are required for the rest of the app to function.
+func initRAG(db *sqlx.DB, i18n *i18n.I18n, aiMgr *ai.Manager) *rag.Manager {
+	lo := initLogger("rag")
+	m, err := rag.New(rag.Opts{
+		DB:            db,
+		Lo:            lo,
+		I18n:          i18n,
+		EmbeddingFunc: aiMgr.GenerateEmbedding,
+	})
+	if err != nil {
+		log.Fatalf("error initializing RAG manager: %v", err)
+	}
+	return m
+}
+
+// initRAGSync inits the RAG sync coordinator that periodically re-
+// indexes every enabled knowledge source. 1h interval is the v1.0.3-
+// production default — tightened to 5m+ would thrash OpenAI's
+// embeddings rate limit on large macro/webpage bases; loosened to >24h
+// makes fresh macro edits invisible to RAG until the next day.
+func initRAGSync(ragMgr *rag.Manager, macroMgr *macro.Manager) *ragsync.Coordinator {
+	lo := initLogger("rag-sync")
+	return ragsync.NewCoordinator(ragsync.CoordinatorOpts{
+		RAG:          ragMgr,
+		Macro:        macroMgr,
+		Lo:           lo,
+		SyncInterval: 1 * time.Hour,
+	})
 }
 
 // initSearch inits search manager.

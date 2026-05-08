@@ -45,6 +45,7 @@ type queries struct {
 	GetPrompt          *sqlx.Stmt `query:"get-prompt"`
 	GetPrompts         *sqlx.Stmt `query:"get-prompts"`
 	SetOpenAIKey       *sqlx.Stmt `query:"set-openai-key"`
+	GetProvider        *sqlx.Stmt `query:"get-provider"`
 }
 
 // New creates and returns a new instance of the Manager.
@@ -175,6 +176,82 @@ func (m *Manager) GetOpenAIClient() *OpenAIClient {
 		return nil
 	}
 	return NewOpenAIClient(decryptedKey, m.lo)
+}
+
+// GenerateEmbedding generates an OpenAI text-embedding-3-small embedding
+// for the given text. Always reaches for the stored OpenAI provider —
+// embeddings are an OpenAI-proper API, not available via OpenRouter or
+// other LLM relays — so this bypasses the default-provider machinery.
+//
+// Wired in cmd/init.go as the rag.Manager's EmbeddingFunc. Returns a
+// clean error envelope if no OpenAI provider row exists or its api_key
+// is blank/un-decryptable, matching the error-surface conventions used
+// by the rest of the AI package.
+func (m *Manager) GenerateEmbedding(text string) ([]float32, error) {
+	var p models.Provider
+	if err := m.q.GetProvider.Get(&p, string(ProviderOpenAI)); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, envelope.NewError(envelope.InputError, "OpenAI API key required for embeddings", nil)
+		}
+		m.lo.Error("error fetching OpenAI provider", "error", err)
+		return nil, envelope.NewError(envelope.GeneralError, m.i18n.Ts("globals.messages.errorFetching", "name", "OpenAI provider"), nil)
+	}
+
+	var config struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.Unmarshal([]byte(p.Config), &config); err != nil {
+		m.lo.Error("error parsing OpenAI config", "error", err)
+		return nil, envelope.NewError(envelope.GeneralError, "Error parsing OpenAI config", nil)
+	}
+	if config.APIKey == "" {
+		return nil, envelope.NewError(envelope.InputError, "OpenAI API key required for embeddings", nil)
+	}
+
+	// Decrypt — provider api_key is encrypted at rest (same path as
+	// getDefaultProviderClient). Decryption failure usually means a
+	// changed app.encryption_key; surface as a generic error so the
+	// admin re-saves the key.
+	decryptedKey, err := crypto.Decrypt(config.APIKey, m.encryptionKey)
+	if err != nil {
+		m.lo.Error("error decrypting OpenAI API key", "error", err)
+		return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+
+	client := NewOpenAIClient(decryptedKey, m.lo)
+	return client.GenerateEmbedding(text)
+}
+
+// CompletionWithSystemPrompt sends a prompt with a custom (caller-supplied)
+// system prompt to the default provider. The base Completion method looks
+// the system prompt up by key from ai_prompts; the RAG pipeline assembles
+// the prompt at call time from the search results + user question + the
+// admin-configured template, so it needs a way to bypass the prompt
+// table.
+func (m *Manager) CompletionWithSystemPrompt(systemPrompt, userPrompt string) (string, error) {
+	client, err := m.getDefaultProviderClient()
+	if err != nil {
+		m.lo.Error("error getting provider client", "error", err)
+		return "", err
+	}
+
+	response, err := client.SendPrompt(PromptPayload{
+		SystemPrompt: systemPrompt,
+		UserPrompt:   userPrompt,
+	})
+	if err != nil {
+		if errors.Is(err, ErrInvalidAPIKey) {
+			m.lo.Error("error invalid API key", "error", err)
+			return "", envelope.NewError(envelope.InputError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+		}
+		if errors.Is(err, ErrApiKeyNotSet) {
+			m.lo.Error("error API key not set", "error", err)
+			return "", envelope.NewError(envelope.InputError, m.i18n.Ts("ai.apiKeyNotSet", "provider", "AI Provider"), nil)
+		}
+		m.lo.Error("error sending prompt to provider", "error", err)
+		return "", envelope.NewError(envelope.GeneralError, err.Error(), nil)
+	}
+	return response, nil
 }
 
 // getDefaultProviderClient returns a ProviderClient for the default provider.

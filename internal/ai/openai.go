@@ -91,3 +91,69 @@ func (o *OpenAIClient) SendPrompt(payload PromptPayload) (string, error) {
 	}
 	return "", fmt.Errorf("no response found")
 }
+
+// GenerateEmbedding returns an OpenAI text-embedding-3-small vector for
+// the given text. Used by the RAG pipeline (T3a) for both index-time
+// (chunk → embedding → rag_documents.embedding) and query-time (user
+// question → embedding → cosine search) work.
+//
+// The 1536-dim output of text-embedding-3-small is what the
+// rag_documents.embedding column was sized for; switching models here
+// without rebuilding the table would fail at insert time. The model
+// name is hardcoded for now — T3a-followup units may parameterise it
+// from AISettings.EmbeddingModel.
+func (o *OpenAIClient) GenerateEmbedding(text string) ([]float32, error) {
+	if o.apikey == "" {
+		return nil, ErrApiKeyNotSet
+	}
+
+	bodyBytes, err := json.Marshal(map[string]interface{}{
+		"model": "text-embedding-3-small",
+		"input": text,
+	})
+	if err != nil {
+		o.lo.Error("error marshalling embedding request", "error", err)
+		return nil, fmt.Errorf("marshalling request body: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/embeddings", bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		o.lo.Error("error creating embedding request", "error", err)
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+o.apikey)
+	req.Header.Set("Content-Type", "application/json")
+
+	// 60s budget — the chat client's 10s default isn't enough for the
+	// embedding endpoint under heavier OpenAI load (sync runs may
+	// trigger several embed-calls in quick succession).
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		o.lo.Error("error making embedding request", "error", err)
+		return nil, fmt.Errorf("making HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, ErrInvalidAPIKey
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		o.lo.Error("non-ok response from embedding API", "status", resp.Status, "body", string(body))
+		return nil, fmt.Errorf("API error: %s", resp.Status)
+	}
+
+	var responseBody struct {
+		Data []struct {
+			Embedding []float32 `json:"embedding"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	if len(responseBody.Data) == 0 {
+		return nil, fmt.Errorf("no embedding returned")
+	}
+	return responseBody.Data[0].Embedding, nil
+}

@@ -41,6 +41,8 @@ import (
 	"github.com/abhinavxd/libredesk/internal/inbox"
 	"github.com/abhinavxd/libredesk/internal/media"
 	"github.com/abhinavxd/libredesk/internal/oidc"
+	"github.com/abhinavxd/libredesk/internal/rag"
+	ragsync "github.com/abhinavxd/libredesk/internal/rag/sync"
 	"github.com/abhinavxd/libredesk/internal/ratelimit"
 	"github.com/abhinavxd/libredesk/internal/role"
 	"github.com/abhinavxd/libredesk/internal/setting"
@@ -101,6 +103,8 @@ type App struct {
 	csat             *csat.Manager
 	view             *view.Manager
 	ai               *ai.Manager
+	rag              *rag.Manager
+	ragSync          *ragsync.Coordinator
 	search           *search.Manager
 	activityLog      *activitylog.Manager
 	notifier         *notifier.Service
@@ -234,6 +238,12 @@ func main() {
 		// transcribe callback below before conversation.Run() spins up
 		// the incoming-message workers.
 		aiMgr = initAI(db, i18n)
+		// T3a: macro manager hoisted out of the App{} literal so the
+		// RAG sync coordinator can hold a stable reference to it. Same
+		// reasoning as aiMgr above.
+		macroMgr   = initMacro(db, i18n)
+		ragMgr     = initRAG(db, i18n, aiMgr)
+		ragSyncMgr = initRAGSync(ragMgr, macroMgr)
 	)
 
 	wsHub.SetConversationStore(conversation)
@@ -280,6 +290,11 @@ func main() {
 	go user.MonitorUserAvailability(ctx, onUsersOffline(conversation))
 	go conversation.RunDraftCleaner(ctx, draftRetentionDuration)
 	go conversation.RunTrashManager(ctx, makeTrashSettingsFunc(settings))
+	// T3a: periodic re-indexing of every enabled rag_source. Initial
+	// SyncAll runs immediately so a fresh boot doesn't have to wait
+	// 1h for the first index. Stopped explicitly in the shutdown
+	// sequence below so an in-flight sync drains before exit.
+	ragSyncMgr.Start()
 	// T3y: 7-day auto-redact safety net for any PCI-flagged message an
 	// agent never reviewed. Hourly tick, runs alongside the other workers.
 	// Reuses IMAPDeleteFunc set above so the callback wiring stays in one
@@ -318,8 +333,10 @@ func main() {
 		search:           initSearch(db, i18n),
 		role:             initRole(db, i18n),
 		tag:              initTag(db, i18n),
-		macro:            initMacro(db, i18n),
+		macro:            macroMgr,
 		ai:               aiMgr,
+		rag:              ragMgr,
+		ragSync:          ragSyncMgr,
 		importer:         initImporter(i18n),
 		webhook:          webhook,
 		contextLink:      initContextLink(db, i18n),
@@ -361,6 +378,8 @@ func main() {
 	<-ctx.Done()
 	colorlog.Red("Shutting down HTTP server...")
 	s.Shutdown()
+	colorlog.Red("Shutting down RAG sync...")
+	ragSyncMgr.Stop()
 	colorlog.Red("Shutting down inboxes...")
 	inbox.Close()
 	colorlog.Red("Shutting down automation...")
