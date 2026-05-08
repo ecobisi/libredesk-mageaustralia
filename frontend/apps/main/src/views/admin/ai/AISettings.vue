@@ -227,6 +227,90 @@
           </CardContent>
         </Card>
 
+        <!-- T3d: External search API integration -->
+        <Card>
+          <CardHeader>
+            <div class="flex items-center gap-2">
+              <Bot class="h-5 w-5" />
+              <CardTitle>{{ t('admin.ai.externalSearch.title') }}</CardTitle>
+            </div>
+            <CardDescription>{{ t('admin.ai.externalSearch.description') }}</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-4">
+            <div class="flex items-start justify-between gap-4">
+              <div class="space-y-1">
+                <Label for="ai-external-search-enabled">{{ t('admin.ai.externalSearch.enable') }}</Label>
+                <p class="text-xs text-muted-foreground">{{ t('admin.ai.externalSearch.enableHelp') }}</p>
+              </div>
+              <Switch
+                id="ai-external-search-enabled"
+                v-model:checked="externalSearchEnabled"
+              />
+            </div>
+
+            <div v-if="externalSearchEnabled" class="space-y-4">
+              <div class="space-y-2">
+                <Label for="ai-external-search-url">{{ t('admin.ai.externalSearch.url') }}</Label>
+                <Input
+                  id="ai-external-search-url"
+                  v-model="externalSearchURL"
+                  type="text"
+                  :placeholder="t('admin.ai.externalSearch.urlPlaceholder')"
+                />
+                <p class="text-xs text-muted-foreground">
+                  {{ t('admin.ai.externalSearch.urlHelp') }}
+                </p>
+              </div>
+
+              <div class="space-y-2">
+                <Label for="ai-external-search-endpoints">{{ t('admin.ai.externalSearch.endpoints') }}</Label>
+                <Textarea
+                  id="ai-external-search-endpoints"
+                  v-model="externalSearchEndpoints"
+                  rows="4"
+                  :placeholder="t('admin.ai.externalSearch.endpointsPlaceholder')"
+                  class="font-mono text-sm"
+                />
+                <p class="text-xs text-muted-foreground">
+                  {{ t('admin.ai.externalSearch.endpointsHelp') }}
+                </p>
+              </div>
+
+              <div class="space-y-2">
+                <Label for="ai-external-search-headers">{{ t('admin.ai.externalSearch.headers') }}</Label>
+                <Textarea
+                  id="ai-external-search-headers"
+                  v-model="externalSearchHeaders"
+                  rows="3"
+                  :placeholder="t('admin.ai.externalSearch.headersPlaceholder')"
+                  class="font-mono text-sm"
+                />
+                <p class="text-xs text-muted-foreground">
+                  {{ t('admin.ai.externalSearch.headersHelp') }}
+                </p>
+              </div>
+
+              <div class="space-y-2 max-w-[200px]">
+                <Label for="ai-external-search-max">{{ t('admin.ai.externalSearch.maxResults') }}</Label>
+                <Input
+                  id="ai-external-search-max"
+                  v-model.number="externalSearchMaxResults"
+                  type="number"
+                  min="1"
+                  max="10"
+                />
+                <p class="text-xs text-muted-foreground">
+                  {{ t('admin.ai.externalSearch.maxResultsHelp') }}
+                </p>
+              </div>
+            </div>
+
+            <Button @click="saveExternalSearchSettings" :isLoading="savingExternalSearch">
+              {{ t('globals.messages.save') }}
+            </Button>
+          </CardContent>
+        </Card>
+
         <!-- T3v: voicemail transcription -->
         <form @submit.prevent="onSubmitTranscription" class="space-y-6 w-full max-w-xl">
           <h2 class="text-base font-medium">{{ t('admin.ai.transcription.title') }}</h2>
@@ -354,6 +438,17 @@ const systemPrompt = ref('')
 const maxContextChunks = ref(5)
 const similarityThreshold = ref(0.25)
 
+// T3d external-search state. Disabled by default — RAG continues to use
+// only pgvector context until the admin opts in. Endpoints / headers are
+// freeform JSON strings: the admin types them as-is, the backend parses
+// at use-time. Shape examples are in the placeholder/help text.
+const savingExternalSearch = ref(false)
+const externalSearchEnabled = ref(false)
+const externalSearchURL = ref('')
+const externalSearchMaxResults = ref(3)
+const externalSearchEndpoints = ref('')
+const externalSearchHeaders = ref('')
+
 const showToast = (description, variant) =>
   emitter.emit(EMITTER_EVENTS.SHOW_TOAST, variant ? { variant, description } : { description })
 
@@ -474,6 +569,21 @@ async function loadAISettings() {
     if (data['ai.similarity_threshold']) {
       similarityThreshold.value = data['ai.similarity_threshold']
     }
+    if (data['ai.external_search_enabled'] !== undefined) {
+      externalSearchEnabled.value = !!data['ai.external_search_enabled']
+    }
+    if (data['ai.external_search_url'] !== undefined) {
+      externalSearchURL.value = data['ai.external_search_url'] || ''
+    }
+    if (data['ai.external_search_max_results']) {
+      externalSearchMaxResults.value = data['ai.external_search_max_results']
+    }
+    if (data['ai.external_search_endpoints'] !== undefined) {
+      externalSearchEndpoints.value = data['ai.external_search_endpoints'] || ''
+    }
+    if (data['ai.external_search_headers'] !== undefined) {
+      externalSearchHeaders.value = data['ai.external_search_headers'] || ''
+    }
   } catch (err) {
     showToast(handleHTTPError(err).message, 'destructive')
   }
@@ -520,6 +630,62 @@ async function saveRAGSettings() {
     showToast(handleHTTPError(err).message, 'destructive')
   } finally {
     savingRAG.value = false
+  }
+}
+
+// saveExternalSearchSettings persists only the five external-search
+// fields. Validation is duplicated client-side so admins get a fast
+// snap-back error without a server round-trip; the same checks run
+// server-side in handleUpdateAISettings as the canonical guard.
+async function saveExternalSearchSettings() {
+  // If turning the feature on, the URL must be present — saving an
+  // enabled-but-empty config would silently no-op (the runtime guard
+  // skips empty URLs) which is the worst kind of "did it work?" UX.
+  if (externalSearchEnabled.value && !externalSearchURL.value.trim()) {
+    showToast(t('admin.ai.externalSearch.urlRequired'), 'destructive')
+    return
+  }
+  const maxResults = parseInt(externalSearchMaxResults.value, 10)
+  if (!Number.isFinite(maxResults) || maxResults < 1 || maxResults > 10) {
+    showToast(t('admin.ai.externalSearch.maxResultsInvalid'), 'destructive')
+    return
+  }
+  // JSON validity check — we store the strings verbatim (the backend
+  // parses at use-time), but bad JSON is a silent runtime no-op so
+  // catch it at save-time. Empty string is valid (means "no config").
+  const endpointsRaw = externalSearchEndpoints.value.trim()
+  if (endpointsRaw) {
+    try {
+      JSON.parse(endpointsRaw)
+    } catch {
+      showToast(t('admin.ai.externalSearch.endpointsInvalid'), 'destructive')
+      return
+    }
+  }
+  const headersRaw = externalSearchHeaders.value.trim()
+  if (headersRaw) {
+    try {
+      JSON.parse(headersRaw)
+    } catch {
+      showToast(t('admin.ai.externalSearch.headersInvalid'), 'destructive')
+      return
+    }
+  }
+
+  savingExternalSearch.value = true
+  try {
+    await api.updateSettings('ai', {
+      'ai.external_search_enabled': !!externalSearchEnabled.value,
+      'ai.external_search_url': externalSearchURL.value || '',
+      'ai.external_search_max_results': maxResults,
+      'ai.external_search_endpoints': endpointsRaw,
+      'ai.external_search_headers': headersRaw
+    })
+    showToast(t('globals.messages.savedSuccessfully'))
+  } catch (err) {
+    showToast(handleHTTPError(err).message, 'destructive')
+  } finally {
+    savingExternalSearch.value = false
   }
 }
 

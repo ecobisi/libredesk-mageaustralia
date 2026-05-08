@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,6 +57,7 @@ import (
 	"github.com/abhinavxd/libredesk/internal/view"
 	"github.com/abhinavxd/libredesk/internal/webhook"
 	"github.com/abhinavxd/libredesk/internal/ws"
+	"github.com/abhinavxd/ssrfguard"
 	"github.com/jmoiron/sqlx"
 	"github.com/knadh/go-i18n"
 	kjson "github.com/knadh/koanf/parsers/json"
@@ -1085,6 +1089,44 @@ func initContextLink(db *sqlx.DB, i18n *i18n.I18n) *contextlink.Manager {
 		log.Fatalf("error initializing context link manager: %v", err)
 	}
 	return m
+}
+
+// initExternalSearchClient builds the SSRF-guarded http.Client used by
+// T3d's external-search-API integration. URL + headers come from
+// admin-controlled DB settings (ai.external_search_*) so the dialer
+// MUST reject loopback/RFC1918/link-local/IPv6-reserved targets to
+// prevent an admin's compromised browser session pivoting to internal
+// services. ai.allowed_hosts is a CIDR allowlist for self-hosted
+// search APIs that legitimately live on a private subnet (mirrors
+// webhook.allowed_hosts and oidc.allowed_hosts).
+//
+// 10s timeout matches the v1.0.3 source — Meilisearch responses are
+// usually sub-second; anything past 10s for one classify-then-search
+// hop blows the agent UX budget for "Generate Response" anyway.
+func initExternalSearchClient() *http.Client {
+	lo := initLogger("external-search")
+	var prefixes []netip.Prefix
+	for _, h := range ko.Strings("ai.allowed_hosts") {
+		prefix, err := netip.ParsePrefix(h)
+		if err != nil {
+			lo.Warn("ignoring invalid ai `allowed_hosts` entry", "entry", h, "error", err)
+			continue
+		}
+		prefixes = append(prefixes, prefix)
+	}
+	guard := ssrfguard.New(prefixes...)
+	return &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   3 * time.Second,
+				KeepAlive: 30 * time.Second,
+				Control:   guard.Control,
+			}).DialContext,
+			TLSHandshakeTimeout:   3 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+		},
+	}
 }
 
 // initWebhook inits webhook manager.

@@ -836,7 +836,12 @@ VALUES
     ('ai.embedding_model', '"text-embedding-3-small"'::jsonb),
     ('ai.system_prompt', '""'::jsonb),
     ('ai.max_context_chunks', '5'::jsonb),
-    ('ai.similarity_threshold', '0.25'::jsonb);
+    ('ai.similarity_threshold', '0.25'::jsonb),
+    ('ai.external_search_enabled', 'false'::jsonb),
+    ('ai.external_search_url', '""'::jsonb),
+    ('ai.external_search_max_results', '3'::jsonb),
+    ('ai.external_search_endpoints', '""'::jsonb),
+    ('ai.external_search_headers', '""'::jsonb);
 
 -- Default conversation priorities
 INSERT INTO conversation_priorities (name) VALUES

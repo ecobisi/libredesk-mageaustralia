@@ -88,12 +88,34 @@ type PCISettings struct {
 //     production-tuned default that catches paraphrased queries while
 //     rejecting obviously-unrelated chunks. Tightening past 0.5 risks empty
 //     results on legitimate questions.
+//
+// T3d External-search fields. When ExternalSearchEnabled is true and
+// ExternalSearchURL is non-empty, the RAG pipeline runs a two-step
+// classify-then-search routine that feeds Meilisearch-compatible API
+// results into the prompt as an additional context block via the
+// {{external_search_results}} placeholder. All HTTP traffic is routed
+// through the SS2 SSRF-guarded http.Client so admin-supplied URLs cannot
+// reach private/loopback ranges.
+//
+//   - ExternalSearchURL is the Meilisearch (or compatible) base URL.
+//     Endpoint paths from ExternalSearchEndpoints are appended.
+//   - ExternalSearchMaxResults caps hits per endpoint. 0 falls back to 3.
+//   - ExternalSearchEndpoints is a JSON object string mapping intent
+//     types to endpoint paths, e.g.
+//     `{"product": "/indexes/products/search", "category": "...", "faq": "..."}`.
+//   - ExternalSearchHeaders is an optional JSON object string of custom
+//     headers (e.g. Authorization, Referer, User-Agent overrides).
 type AISettings struct {
-	TranscriptionEnabled  bool    `json:"ai.transcription_enabled" db:"ai.transcription_enabled"`
-	TranscriptionProvider string  `json:"ai.transcription_provider" db:"ai.transcription_provider"`
-	Enabled               bool    `json:"ai.enabled" db:"ai.enabled"`
-	EmbeddingModel        string  `json:"ai.embedding_model" db:"ai.embedding_model"`
-	SystemPrompt          string  `json:"ai.system_prompt" db:"ai.system_prompt"`
-	MaxContextChunks      int     `json:"ai.max_context_chunks" db:"ai.max_context_chunks"`
-	SimilarityThreshold   float64 `json:"ai.similarity_threshold" db:"ai.similarity_threshold"`
+	TranscriptionEnabled     bool    `json:"ai.transcription_enabled" db:"ai.transcription_enabled"`
+	TranscriptionProvider    string  `json:"ai.transcription_provider" db:"ai.transcription_provider"`
+	Enabled                  bool    `json:"ai.enabled" db:"ai.enabled"`
+	EmbeddingModel           string  `json:"ai.embedding_model" db:"ai.embedding_model"`
+	SystemPrompt             string  `json:"ai.system_prompt" db:"ai.system_prompt"`
+	MaxContextChunks         int     `json:"ai.max_context_chunks" db:"ai.max_context_chunks"`
+	SimilarityThreshold      float64 `json:"ai.similarity_threshold" db:"ai.similarity_threshold"`
+	ExternalSearchEnabled    bool    `json:"ai.external_search_enabled" db:"ai.external_search_enabled"`
+	ExternalSearchURL        string  `json:"ai.external_search_url" db:"ai.external_search_url"`
+	ExternalSearchMaxResults int     `json:"ai.external_search_max_results" db:"ai.external_search_max_results"`
+	ExternalSearchEndpoints  string  `json:"ai.external_search_endpoints" db:"ai.external_search_endpoints"`
+	ExternalSearchHeaders    string  `json:"ai.external_search_headers" db:"ai.external_search_headers"`
 }

@@ -147,6 +147,13 @@ allowed_hosts = []
 # are blocked unless listed here.
 allowed_hosts = []
 
+[ai]
+# CIDR ranges allowed to bypass SSRF protection on the T3d external-search
+# integration. Set this if your search API (Meilisearch, Typesense, etc.)
+# runs on a private subnet (e.g. ["10.0.0.0/8"]). Empty by default — all
+# loopback / RFC1918 / link-local / IPv6 reserved ranges are blocked.
+allowed_hosts = []
+
 [conversation]
 # How often to check for conversations to unsnooze
 unsnooze_interval = "5m"

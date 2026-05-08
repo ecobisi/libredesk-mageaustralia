@@ -255,6 +255,16 @@ func handleUpdateAISettings(r *fastglue.Request) error {
 	if req.SimilarityThreshold < 0 || req.SimilarityThreshold > 1 {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "similarity_threshold must be between 0 and 1", nil, envelope.InputError)
 	}
+	// T3d external-search bounds. Negative = nonsense; >10 results per
+	// endpoint is well past what the LLM can usefully reason about and
+	// would balloon prompt-token cost. JSON-string fields (endpoints,
+	// headers) are validated at use-time in performExternalSearch
+	// because parse failure there is non-fatal — admins can save
+	// half-finished JSON during edit and the runtime degrades to "no
+	// external search".
+	if req.ExternalSearchMaxResults < 0 || req.ExternalSearchMaxResults > 10 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "external_search_max_results must be between 0 and 10", nil, envelope.InputError)
+	}
 	if err := app.setting.Update(req); err != nil {
 		return sendErrorEnvelope(r, err)
 	}

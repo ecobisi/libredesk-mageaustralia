@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -105,6 +106,13 @@ type App struct {
 	ai               *ai.Manager
 	rag              *rag.Manager
 	ragSync          *ragsync.Coordinator
+	// extSearchClient is the SSRF-guarded HTTP client used by T3d's
+	// external-search-API integration in cmd/rag.go. URLs are admin-
+	// supplied so DNS-rebinding-safe egress is mandatory; the dialer
+	// blocks loopback / RFC1918 / link-local / IPv6-reserved ranges
+	// unless ai.allowed_hosts CIDR-allowlists them. Reuses the same
+	// ssrfguard pattern as auth/oidc and webhook.
+	extSearchClient *http.Client
 	search           *search.Manager
 	activityLog      *activitylog.Manager
 	notifier         *notifier.Service
@@ -337,6 +345,7 @@ func main() {
 		ai:               aiMgr,
 		rag:              ragMgr,
 		ragSync:          ragSyncMgr,
+		extSearchClient:  initExternalSearchClient(),
 		importer:         initImporter(i18n),
 		webhook:          webhook,
 		contextLink:      initContextLink(db, i18n),

@@ -1,17 +1,63 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/abhinavxd/libredesk/internal/envelope"
 	"github.com/abhinavxd/libredesk/internal/rag/models"
+	settingmodels "github.com/abhinavxd/libredesk/internal/setting/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
+
+// T3d external-search-API integration types.
+//
+// SearchIntent is one classified bucket the LLM derived from the
+// customer message. SearchClassification wraps the JSON the classifier
+// returns; the type/query strings are echoed back into the search call.
+//
+// ExternalSearchHit and ExternalSearchResponse mirror the
+// Meilisearch /indexes/<idx>/search response shape with optional
+// product-/category-/FAQ-specific fields. Generic enough to absorb any
+// Meilisearch-compatible search backend; non-Meilisearch APIs that
+// expose a similarly-shaped JSON response (Typesense, Elasticsearch
+// adapters) work as long as they return `hits` of objects with at
+// minimum a `name`/`question` field.
+type SearchIntent struct {
+	Type  string `json:"type"`
+	Query string `json:"query"`
+}
+
+type SearchClassification struct {
+	Intents []SearchIntent `json:"intents"`
+}
+
+type ExternalSearchHit struct {
+	Name            string                 `json:"name"`
+	Question        string                 `json:"question"`
+	Answer          string                 `json:"answer"`
+	URL             string                 `json:"url"`
+	Description     string                 `json:"description"`
+	MetaDescription string                 `json:"meta_description"`
+	BrandID         string                 `json:"brand_id"`
+	InStock         int                    `json:"in_stock"`
+	ProductCount    int                    `json:"product_count"`
+	Price           map[string]interface{} `json:"price"`
+	Categories      map[string]interface{} `json:"categories"`
+}
+
+type ExternalSearchResponse struct {
+	Hits               []ExternalSearchHit `json:"hits"`
+	Query              string              `json:"query"`
+	EstimatedTotalHits int                 `json:"estimatedTotalHits"`
+}
 
 // handleGetRAGSources returns all RAG knowledge sources, ordered by
 // created_at desc. Surfaces under perm `ai:manage` — admin-only.
@@ -156,8 +202,8 @@ func handleRAGSearch(r *fastglue.Request) error {
 // defaultRAGSystemPrompt is used when ai.system_prompt is empty. Kept
 // in cmd/rag.go (not the settings layer) so the admin-saved empty
 // string round-trips cleanly. Supports the same {{site_name}} /
-// {{context}} / {{macros}} / {{enquiry}} substitutions as a custom
-// prompt.
+// {{today}} / {{context}} / {{macros}} / {{enquiry}} /
+// {{external_search_results}} substitutions as a custom prompt.
 // The customer question is wrapped in <customer_message> XML
 // delimiters so the LLM treats it as opaque user data rather than
 // executable instructions — mitigates "IGNORE ALL PREVIOUS
@@ -248,6 +294,31 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 	}
 	app.lo.Info("RAG generate response", "results_count", len(results), "threshold", threshold)
 
+	// T3d: optionally augment the prompt with results from an external
+	// HTTP search API. Two-step pipeline: classify the customer message
+	// into search intents (product / category / faq / …), then fan out
+	// one HTTP POST per matched endpoint and format the hits as a
+	// dedicated context block. Failure at any stage degrades gracefully
+	// to "no external context" rather than failing the whole generate
+	// call — the LLM still has the pgvector chunks to work with.
+	var externalSearchContext string
+	if aiSettings.ExternalSearchEnabled && aiSettings.ExternalSearchURL != "" {
+		maxSearchResults := aiSettings.ExternalSearchMaxResults
+		if maxSearchResults <= 0 {
+			maxSearchResults = 3
+		}
+		intents, err := app.classifySearchIntent(req.CustomerMessage)
+		if err != nil {
+			app.lo.Warn("external search classification failed, continuing without", "error", err)
+		} else {
+			app.lo.Info("external search classification", "intents", intents)
+			externalSearchContext = app.performExternalSearch(aiSettings, intents, maxSearchResults)
+			if externalSearchContext != "" {
+				app.lo.Info("external search results added to context", "length", len(externalSearchContext))
+			}
+		}
+	}
+
 	var contextParts, macroParts []string
 	for _, res := range results {
 		if strings.HasPrefix(res.SourceRef, "macro_") {
@@ -275,6 +346,13 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{{site_name}}", ko.String("app.site_name"))
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{{context}}", contextStr)
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{{macros}}", macrosStr)
+	// T3d: empty-string when external search is disabled, unreachable,
+	// or returned no hits — admins who don't include the placeholder in
+	// their template are unaffected; admins who do see "" rather than
+	// the literal token. Substituted before {{enquiry}} so a customer
+	// message containing the literal "{{external_search_results}}"
+	// can't be promoted into the substitution slot.
+	systemPrompt = strings.ReplaceAll(systemPrompt, "{{external_search_results}}", externalSearchContext)
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{{enquiry}}", req.CustomerMessage)
 
 	response, err := app.ai.CompletionWithSystemPrompt(systemPrompt, req.CustomerMessage)
@@ -285,6 +363,255 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 		"response": response,
 		"sources":  results,
 	})
+}
+
+// classifySearchIntent asks the LLM to bucket the customer's message
+// into zero or more search intents (T3d). The classifier is deliberately
+// conservative — pure greetings/thanks return an empty list so we don't
+// fan out HTTP calls on chit-chat. The customer message is wrapped in
+// XML delimiters to mitigate "IGNORE ALL PREVIOUS INSTRUCTIONS"-style
+// prompt-injection (T3l hardening, applied to this second prompt site
+// too — v1.0.3 0da66067 had it on classifySearchIntent already).
+//
+// Output is hand-stripped of markdown code fences before json.Unmarshal
+// because some providers wrap their JSON in ```json blocks even when
+// asked not to. Failure (parse, network, etc.) is non-fatal — the caller
+// logs and skips external search.
+func (app *App) classifySearchIntent(message string) ([]SearchIntent, error) {
+	classifyPrompt := `Analyze this customer support message and extract search intents.
+Return JSON only, no other text.
+
+Message:
+<customer_message>
+` + message + `
+</customer_message>
+
+Response format:
+{"intents": [{"type": "product", "query": "concise search terms"}, {"type": "category", "query": "concise terms"}, {"type": "faq", "query": "concise terms"}]}
+
+Rules:
+- Only include intent types that are relevant to the message
+- Keep queries to 2-5 words, suitable for search
+- "product" = looking for a specific product, brand, or item
+- "category" = browsing a type/category of items
+- "faq" = asking about policies, shipping, returns, orders, delivery, etc.
+- A message can have multiple intents
+- If the message is purely conversational (greetings, thanks) or not related to products/policies, return empty intents: {"intents": []}
+- Do NOT wrap in markdown code blocks`
+
+	response, err := app.ai.CompletionWithSystemPrompt("You are a JSON-only classifier. Output valid JSON only, no markdown, no explanation.", classifyPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("classification failed: %w", err)
+	}
+
+	response = strings.TrimSpace(response)
+	response = strings.TrimPrefix(response, "```json")
+	response = strings.TrimPrefix(response, "```")
+	response = strings.TrimSuffix(response, "```")
+	response = strings.TrimSpace(response)
+
+	var classification SearchClassification
+	if err := json.Unmarshal([]byte(response), &classification); err != nil {
+		return nil, fmt.Errorf("failed to parse classification: %w (response: %s)", err, response)
+	}
+	return classification.Intents, nil
+}
+
+// queryExternalSearch issues one POST against a Meilisearch-compatible
+// search endpoint. Routes through the SS2 SSRF-guarded http.Client on
+// the App so admin-supplied URLs cannot pivot to private/loopback
+// targets — the dialer rejects RFC1918/link-local/loopback/IPv6-
+// reserved ranges unless ai.allowed_hosts CIDR-allowlists them. Returns
+// a generic "blocked by SSRF guard" wrap on dial-deny so the caller's
+// log makes the cause visible without leaking internal IPs.
+func (app *App) queryExternalSearch(searchURL, query string, limit int, headers map[string]string) (*ExternalSearchResponse, error) {
+	payload := fmt.Sprintf(`{"q":%q,"limit":%d}`, query, limit)
+	req, err := http.NewRequest(http.MethodPost, searchURL, bytes.NewBufferString(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", "Libredesk/2")
+	}
+
+	client := app.extSearchClient
+	if client == nil {
+		// Defensive — main.go always wires this. A nil client at runtime
+		// would mean the wiring regressed; falling back to a guarded
+		// no-op client is the safest behaviour.
+		return nil, fmt.Errorf("external search HTTP client not initialised")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		// ssrfguard surfaces a "blocked address" / dial error here.
+		// Wrap once with a recognisable phrase so operators tracing
+		// "blocked by SSRF guard" in logs land on the right call site.
+		if strings.Contains(err.Error(), "blocked") || strings.Contains(err.Error(), "denied") {
+			return nil, fmt.Errorf("blocked by SSRF guard: %w", err)
+		}
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("external search returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result ExternalSearchResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// performExternalSearch fans out one HTTP call per matched intent and
+// formats the hits into a Markdown-ish context block fed into the
+// system prompt via {{external_search_results}}. Empty endpoint config,
+// no matched intents, and unreachable URLs all return the empty string
+// — the caller's substitution stays a literal empty token in the
+// prompt, which the LLM ignores cleanly.
+//
+// Endpoint and header config are stored as JSON-string settings rather
+// than typed structs because the v1.0.3 admin form lets operators wire
+// in arbitrary key/value pairs (intent → path; header name → header
+// value); a typed struct would force a schema migration on every new
+// supported intent type.
+func (app *App) performExternalSearch(aiSettings settingmodels.AISettings, intents []SearchIntent, maxResults int) string {
+	endpoints := make(map[string]string)
+	if aiSettings.ExternalSearchEndpoints != "" {
+		if err := json.Unmarshal([]byte(aiSettings.ExternalSearchEndpoints), &endpoints); err != nil {
+			app.lo.Warn("failed to parse external search endpoints config", "error", err)
+			return ""
+		}
+	}
+	if len(endpoints) == 0 {
+		app.lo.Warn("no external search endpoints configured")
+		return ""
+	}
+
+	headers := make(map[string]string)
+	if aiSettings.ExternalSearchHeaders != "" {
+		if err := json.Unmarshal([]byte(aiSettings.ExternalSearchHeaders), &headers); err != nil {
+			app.lo.Warn("failed to parse external search headers config", "error", err)
+		}
+	}
+
+	baseURL := strings.TrimRight(aiSettings.ExternalSearchURL, "/")
+
+	var sections []string
+	for _, intent := range intents {
+		endpointPath, ok := endpoints[intent.Type]
+		if !ok {
+			continue
+		}
+		searchURL := baseURL + endpointPath
+		results, err := app.queryExternalSearch(searchURL, intent.Query, maxResults, headers)
+		if err != nil {
+			app.lo.Warn("external search query failed", "type", intent.Type, "query", intent.Query, "error", err)
+			continue
+		}
+		if len(results.Hits) == 0 {
+			continue
+		}
+
+		switch intent.Type {
+		case "product":
+			var lines []string
+			for i, hit := range results.Hits {
+				price := ""
+				if aud, ok := hit.Price["AUD"]; ok {
+					if audMap, ok := aud.(map[string]interface{}); ok {
+						if formatted, ok := audMap["default_formated"].(string); ok {
+							price = formatted
+						}
+						if origFormatted, ok := audMap["default_original_formated"].(string); ok {
+							price += " (was " + origFormatted + ")"
+						}
+					}
+				}
+				stock := "In Stock"
+				if hit.InStock == 0 {
+					stock = "Out of Stock"
+				}
+				line := fmt.Sprintf("%d. %s", i+1, hit.Name)
+				if hit.BrandID != "" {
+					line += " by " + hit.BrandID
+				}
+				if price != "" {
+					line += " - " + price
+				}
+				line += " - " + stock
+				line += "\n   URL: " + hit.URL
+				desc := stripHTMLForExternalSearch(hit.Description)
+				if len(desc) > 200 {
+					desc = desc[:200] + "..."
+				}
+				if desc != "" {
+					line += "\n   " + strings.TrimSpace(desc)
+				}
+				lines = append(lines, line)
+			}
+			sections = append(sections, "=== Product Results (from website) ===\n"+strings.Join(lines, "\n\n"))
+
+		case "category":
+			var lines []string
+			for i, hit := range results.Hits {
+				line := fmt.Sprintf("%d. %s (%d products)", i+1, hit.Name, hit.ProductCount)
+				line += "\n   URL: " + hit.URL
+				if hit.MetaDescription != "" {
+					desc := hit.MetaDescription
+					if len(desc) > 200 {
+						desc = desc[:200] + "..."
+					}
+					line += "\n   " + desc
+				}
+				lines = append(lines, line)
+			}
+			sections = append(sections, "=== Category Results (from website) ===\n"+strings.Join(lines, "\n\n"))
+
+		case "faq":
+			var lines []string
+			for i, hit := range results.Hits {
+				line := fmt.Sprintf("%d. Q: %s\n   A: %s", i+1, hit.Question, hit.Answer)
+				line += "\n   URL: " + hit.URL
+				lines = append(lines, line)
+			}
+			sections = append(sections, "=== FAQ Results (from website) ===\n"+strings.Join(lines, "\n\n"))
+		}
+	}
+	if len(sections) == 0 {
+		return ""
+	}
+	return strings.Join(sections, "\n\n")
+}
+
+// stripHTMLForExternalSearch is a tiny tag-stripper used to flatten the
+// product description before injecting into the prompt context. v1.0.3
+// 0da66067 carried its own stripHTML in cmd/rag.go; v2 already has a
+// regex-based version in internal/rag/sync/macro.go (T3l-hoisted), but
+// it's package-internal there. Rather than exporting it just for this
+// site, we keep a small purpose-built one — same behaviour for this
+// callsite, scoped to ~200-char product blurbs.
+func stripHTMLForExternalSearch(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	for strings.Contains(s, "<") {
+		start := strings.Index(s, "<")
+		end := strings.Index(s[start:], ">")
+		if end == -1 {
+			break
+		}
+		s = s[:start] + s[start+end+1:]
+	}
+	return strings.TrimSpace(s)
 }
 
 // handleRAGFileUpload handles file uploads for RAG knowledge sources.
