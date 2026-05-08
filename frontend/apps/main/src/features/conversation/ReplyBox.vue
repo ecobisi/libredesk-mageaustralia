@@ -457,12 +457,13 @@ const handleGenerateResponse = async () => {
     }
 
     // Strip HTML — the AI prompt eats raw text more efficiently
-    // and we don't need markup at the LLM input layer.
+    // and we don't need markup at the LLM input layer. Use DOMParser
+    // rather than `innerHTML` assignment so the parsed-but-never-mounted
+    // document doesn't fire resource-loading side-effects.
     const conversationText = messages
       .map((m) => {
-        const tempDiv = document.createElement('div')
-        tempDiv.innerHTML = m.content || ''
-        const text = tempDiv.textContent || tempDiv.innerText || ''
+        const doc = new DOMParser().parseFromString(m.content || '', 'text/html')
+        const text = doc.body.textContent || ''
         const role = m.type === 'incoming' ? 'Customer' : 'Agent'
         return `${role}: ${text.trim()}`
       })
@@ -483,9 +484,17 @@ const handleGenerateResponse = async () => {
       // Provider responses sometimes mix HTML + raw newlines; if HTML
       // is present we strip newlines (HTML provides structure),
       // otherwise convert newlines to <br>.
-      htmlContent.value = /<[a-z][\s\S]*>/i.test(response)
+      let generatedHtml = /<[a-z][\s\S]*>/i.test(response)
         ? response.replace(/\n+/g, '')
         : response.replace(/\n/g, '<br>')
+      // Sanitise AI response before injecting into the editor: an LLM
+      // can be coaxed into emitting <script> tags or inline event
+      // handlers (onclick=…) which would execute in the agent's
+      // browser when TipTap parses the HTML. Strip both classes
+      // before assignment.
+      generatedHtml = generatedHtml.replace(/<script[\s\S]*?<\/script>/gi, '')
+      generatedHtml = generatedHtml.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+      htmlContent.value = generatedHtml
       toast.success(t('replyBox.generateSuccess'))
     }
   } catch (error) {
