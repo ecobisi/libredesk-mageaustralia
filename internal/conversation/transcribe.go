@@ -43,6 +43,8 @@ var audioContentTypes = map[string]bool{
 // pairs the pipeline needs. Each provider runs async so a slow Whisper or
 // busy local worker doesn't stall message ingestion.
 func (m *Manager) transcribeAudioAttachments(conversationUUID string, media []mmodels.Media) {
+	m.lo.Info("transcribeAudioAttachments called", "conversation_uuid", conversationUUID, "media_count", len(media))
+
 	if len(media) == 0 {
 		return
 	}
@@ -53,7 +55,10 @@ func (m *Manager) transcribeAudioAttachments(conversationUUID string, media []mm
 		return
 	}
 
+	m.lo.Info("transcription settings", "enabled", aiSettings.TranscriptionEnabled, "provider", aiSettings.TranscriptionProvider)
+
 	if !aiSettings.TranscriptionEnabled {
+		m.lo.Info("transcription is disabled, skipping")
 		return
 	}
 
@@ -65,6 +70,7 @@ func (m *Manager) transcribeAudioAttachments(conversationUUID string, media []mm
 
 	for _, med := range media {
 		ct := strings.ToLower(med.ContentType)
+		m.lo.Info("checking media for transcription", "uuid", med.UUID, "content_type", ct, "is_audio", audioContentTypes[ct])
 		if !audioContentTypes[ct] {
 			continue
 		}
@@ -130,7 +136,9 @@ func (m *Manager) transcribeViaLocal(conversationUUID string, med mmodels.Media)
 	jobPath := filepath.Join(transcribeQueueDir, med.UUID+".job")
 	if err := os.WriteFile(jobPath, []byte(jobContent), 0644); err != nil {
 		m.lo.Error("error writing transcription job", "error", err, "path", jobPath)
+		return
 	}
+	m.lo.Info("transcription job queued", "uuid", med.UUID, "job", jobPath)
 }
 
 // insertTranscript writes the transcript as a private agent note on the
