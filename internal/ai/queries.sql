@@ -49,9 +49,10 @@ ON CONFLICT (name) DO NOTHING;
 -- name: set-openrouter-config
 -- T3b: Save the OpenRouter API key + model. Empty $1 (api_key) means
 -- "preserve the existing key" so the admin can change just the model
--- without re-entering the key. T3j will swap the plaintext store for
--- crypto.Encrypt — until then, the api_key field is plaintext. (OpenAI
--- predates this concern and is already encrypted.)
+-- without re-entering the key. As of T3j the api_key is stored
+-- encrypted at rest (crypto.Encrypt in setOpenRouterConfig); the empty
+-- string sentinel is checked BEFORE encryption, so this CASE still
+-- works as designed.
 UPDATE ai_providers
 SET config = jsonb_build_object(
     'api_key', CASE WHEN $1::text = '' THEN config->>'api_key' ELSE $1::text END,

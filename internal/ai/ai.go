@@ -226,9 +226,11 @@ func (m *Manager) TestProvider(provider, apiKey, model string) error {
 // re-enter the key in the form. Returns ("", "") on any error — TestProvider
 // then falls through to ErrApiKeyNotSet which the caller surfaces cleanly.
 //
-// For OpenAI the stored api_key is encrypted; decryption happens here so
-// the test reflects what a real call would see. OpenRouter is plaintext
-// for now (T3j moves it to encrypted-at-rest).
+// Both OpenAI and OpenRouter store the api_key encrypted at rest; decryption
+// happens here so the test reflects what a real call would see. Decryption
+// failure (typically a changed app.encryption_key, or a legacy plaintext row
+// from before T3j) bails out as ("", "") so the admin sees ErrApiKeyNotSet
+// and re-saves the key, which writes a fresh encrypted value.
 func (m *Manager) getSavedAPIKey(provider string) (string, string) {
 	rows, err := m.q.GetProviders.Queryx()
 	if err != nil {
@@ -250,13 +252,15 @@ func (m *Manager) getSavedAPIKey(provider string) (string, string) {
 		}
 		apiKey, _ := config["api_key"].(string)
 		model, _ := config["model"].(string)
-		// OpenAI is encrypted at rest; decrypt before handing back.
-		// OpenRouter is plaintext until T3j.
-		if ProviderType(provider) == ProviderOpenAI && apiKey != "" {
-			if dec, err := crypto.Decrypt(apiKey, m.encryptionKey); err == nil {
-				apiKey = dec
-			} else {
-				return "", ""
+		// Both providers store api_key encrypted at rest.
+		if apiKey != "" {
+			switch ProviderType(provider) {
+			case ProviderOpenAI, ProviderOpenRouter:
+				if dec, err := crypto.Decrypt(apiKey, m.encryptionKey); err == nil {
+					apiKey = dec
+				} else {
+					return "", ""
+				}
 			}
 		}
 		return apiKey, model
@@ -288,11 +292,26 @@ func (m *Manager) setOpenAIAPIKey(apiKey string) error {
 // the values. An empty apiKey preserves whatever's already stored — lets
 // admins change just the model from the UI.
 //
-// API key is stored plaintext until T3j adds encryption-at-rest (mirroring
-// the existing OpenAI encryption path).
+// API key is encrypted at rest via crypto.Encrypt (T3j) — same path as
+// the OpenAI provider — so a stolen DB dump alone doesn't surface bearer
+// tokens. The empty-key sentinel ("preserve existing") happens BEFORE
+// encryption so the SQL CASE in set-openrouter-config still sees `''`.
 func (m *Manager) setOpenRouterConfig(apiKey, model string) error {
 	if model == "" {
 		model = defaultOpenRouterModel
+	}
+
+	// Encrypt the API key before storing. Empty string is preserved as
+	// the "keep existing key" sentinel that set-openrouter-config's
+	// CASE WHEN $1::text = '' branch keys off — encrypting "" would
+	// produce non-empty ciphertext and clobber the saved key.
+	if apiKey != "" {
+		encryptedKey, err := crypto.Encrypt(apiKey, m.encryptionKey)
+		if err != nil {
+			m.lo.Error("error encrypting OpenRouter API key", "error", err)
+			return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+		}
+		apiKey = encryptedKey
 	}
 
 	if _, err := m.q.UpsertOpenRouter.Exec(); err != nil {
@@ -461,11 +480,23 @@ func (m *Manager) getDefaultProviderClient() (ProviderClient, error) {
 			m.lo.Error("error parsing provider config", "error", err)
 			return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 		}
-		// API key is stored plaintext for now — T3j adds encryption.
-		// An empty key isn't fatal here: the client returns
-		// ErrApiKeyNotSet on first SendPrompt which the manager
-		// surfaces as a clean "configure AI in settings" error.
-		return NewOpenRouterClient(config.APIKey, config.Model, m.lo), nil
+		// Decrypt the API key (encrypted at rest since T3j, mirroring
+		// the OpenAI path). An empty key isn't fatal: the client
+		// returns ErrApiKeyNotSet on first SendPrompt which the manager
+		// surfaces as a clean "configure AI in settings" error — so
+		// skip the decrypt step entirely when the field is empty
+		// (Decrypt would otherwise return a "ciphertext too short"
+		// error that the admin can't act on).
+		apiKey := config.APIKey
+		if apiKey != "" {
+			decryptedKey, err := crypto.Decrypt(apiKey, m.encryptionKey)
+			if err != nil {
+				m.lo.Error("error decrypting OpenRouter API key", "error", err)
+				return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+			}
+			apiKey = decryptedKey
+		}
+		return NewOpenRouterClient(apiKey, config.Model, m.lo), nil
 	default:
 		m.lo.Error("unsupported provider type", "provider", p.Provider)
 		return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("validation.invalidProvider"), nil)

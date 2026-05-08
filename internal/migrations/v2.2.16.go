@@ -21,8 +21,11 @@ import (
 //     existing installs that have already saved an OpenRouter config
 //     (from a manual upsert via the AISettings UI) keep their values.
 //
-// Encryption-at-rest for the OpenRouter api_key follows in T3j (mirroring
-// the existing OpenAI encryption path). For now the value is plaintext.
+// Encryption-at-rest for the OpenRouter api_key was added in T3j
+// (mirroring the existing OpenAI encryption path). The empty seed value
+// here is encryption-agnostic — setOpenRouterConfig encrypts non-empty
+// keys when the admin first saves a value. No migration is required to
+// re-encrypt rows because seeded rows ship with `api_key: ""`.
 //
 // schema.sql carries matching baseline (enum value + seed row) so fresh
 // installs converge with upgraded ones.
