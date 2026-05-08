@@ -30,6 +30,35 @@ func TestStripHTML(t *testing.T) {
 	}
 }
 
+// TestStripHTMLCap verifies T3l's input cap — content beyond
+// stripHTMLMaxLen is truncated to bound runtime + memory regardless of
+// adversarial input.
+func TestStripHTMLCap(t *testing.T) {
+	// 200KB of plain text — well over the 100KB cap.
+	in := strings.Repeat("a", stripHTMLMaxLen*2)
+	got := stripHTML(in)
+	if len(got) > stripHTMLMaxLen {
+		t.Errorf("stripHTML did not cap input: got len %d, want <= %d", len(got), stripHTMLMaxLen)
+	}
+}
+
+// BenchmarkStripHTML measures throughput on 100KB of dense HTML.
+// The v1.0.3 loop-based stripper was O(n^2) in tag-count due to
+// repeated string slicing; v2's regex version is O(n). Run with
+// `go test -bench=BenchmarkStripHTML -benchmem ./internal/rag/sync/`.
+func BenchmarkStripHTML(b *testing.B) {
+	// Build ~100KB of dense HTML: <p>word</p> repeated.
+	var sb strings.Builder
+	for sb.Len() < stripHTMLMaxLen {
+		sb.WriteString("<p>word</p>")
+	}
+	in := sb.String()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = stripHTML(in)
+	}
+}
+
 func TestChunkContent(t *testing.T) {
 	t.Run("short returns one chunk", func(t *testing.T) {
 		got := chunkContent("hello world", 100)

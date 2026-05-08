@@ -94,14 +94,28 @@ func (s *MacroSyncer) getExistingDocuments(sourceID int) ([]string, error) {
 	return refs, err
 }
 
+// htmlTagRe matches HTML tags for stripping.
+var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
+
+// htmlSpaceRe matches runs of whitespace for collapsing.
+var htmlSpaceRe = regexp.MustCompile(`\s+`)
+
+// stripHTMLMaxLen caps the input to stripHTML to keep regex backtracking
+// bounded and per-doc embedding cost finite. v1.0.3 ships this same
+// 100KB cap (T3l mitigates an O(n^2) reallocation bug on the v1.0.3
+// loop-based stripper; v2's regex stripper is already O(n) but the cap
+// is preserved for parity and to bound malicious or runaway input).
+const stripHTMLMaxLen = 100000
+
 // stripHTML removes HTML tags + decodes entities + normalises whitespace.
-// Lifted from v1.0.3 verbatim. T3l (prompt injection mitigation) replaces
-// this with a streaming parser to fix an O(n^2) re-allocation issue on
-// long content; not in scope here.
+// Regexes are package-level so we don't re-compile per call (called per
+// macro and per webpage chunk during sync).
 func stripHTML(s string) string {
-	re := regexp.MustCompile(`<[^>]*>`)
-	s = re.ReplaceAllString(s, " ")
+	if len(s) > stripHTMLMaxLen {
+		s = s[:stripHTMLMaxLen]
+	}
+	s = htmlTagRe.ReplaceAllString(s, " ")
 	s = html.UnescapeString(s)
-	s = regexp.MustCompile(`\s+`).ReplaceAllString(s, " ")
+	s = htmlSpaceRe.ReplaceAllString(s, " ")
 	return strings.TrimSpace(s)
 }

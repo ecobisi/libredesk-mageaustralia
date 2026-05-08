@@ -156,12 +156,22 @@ func handleRAGSearch(r *fastglue.Request) error {
 // string round-trips cleanly. Supports the same {{site_name}} /
 // {{context}} / {{macros}} / {{enquiry}} substitutions as a custom
 // prompt.
+// The customer question is wrapped in <customer_message> XML
+// delimiters so the LLM treats it as opaque user data rather than
+// executable instructions — mitigates "IGNORE ALL PREVIOUS
+// INSTRUCTIONS"-style prompt injection (T3l, mirrors v1.0.3 7f73f8f5).
+// Custom admin-set prompts are not auto-wrapped because admins are
+// trusted to design their own template; the substitution only happens
+// at the {{enquiry}} site.
 const defaultRAGSystemPrompt = `You are a helpful customer support assistant for {{site_name}}. Use the following knowledge base content to answer questions accurately.
 
 Knowledge Base Context:
 {{context}}
 
-Customer Question: {{enquiry}}
+Customer Question:
+<customer_message>
+{{enquiry}}
+</customer_message>
 
 Provide a helpful, accurate response based on the context above. If the context doesn't contain relevant information, let the customer know you'll need to check and get back to them.`
 
