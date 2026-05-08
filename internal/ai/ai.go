@@ -147,6 +147,36 @@ func (m *Manager) getPrompt(k string) (string, error) {
 	return p.Content, nil
 }
 
+// GetOpenAIClient returns an OpenAI client built from the stored provider
+// config, or nil if OpenAI isn't configured (no row, no api_key set, or the
+// stored key fails to decrypt). Used by T3v's voicemail-transcription
+// pipeline, which needs the Whisper API endpoint specifically — Whisper
+// only ships on OpenAI proper, not via OpenRouter — so the orchestration
+// layer reaches for OpenAI directly rather than going through the default
+// provider client. nil-return is intentionally unsurfaced to callers (no
+// envelope error): the conversation manager treats a missing client as
+// "transcription disabled" and logs once.
+func (m *Manager) GetOpenAIClient() *OpenAIClient {
+	var p models.Provider
+	if err := m.q.GetDefaultProvider.Get(&p); err != nil {
+		return nil
+	}
+	if ProviderType(p.Provider) != ProviderOpenAI {
+		return nil
+	}
+	var config struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.Unmarshal([]byte(p.Config), &config); err != nil || config.APIKey == "" {
+		return nil
+	}
+	decryptedKey, err := crypto.Decrypt(config.APIKey, m.encryptionKey)
+	if err != nil {
+		return nil
+	}
+	return NewOpenAIClient(decryptedKey, m.lo)
+}
+
 // getDefaultProviderClient returns a ProviderClient for the default provider.
 func (m *Manager) getDefaultProviderClient() (ProviderClient, error) {
 	var p models.Provider

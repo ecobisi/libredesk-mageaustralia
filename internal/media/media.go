@@ -216,10 +216,14 @@ func (m *Manager) GetBlob(name string) ([]byte, error) {
 // GetURL returns the URL for accessing a media file by its name.
 func (m *Manager) GetURL(uuid, contentType, fileName string) string {
 	// Keep some content types inline. SVG excluded.
+	// T3v: audio/* is inline so the in-thread <audio> player can stream
+	// the file (otherwise S3 signed URLs hand back Content-Disposition:
+	// attachment and the browser refuses to play in <audio>).
 	disposition := "attachment"
 	if contentType != "image/svg+xml" &&
 		(strings.HasPrefix(contentType, "image/") ||
 			strings.HasPrefix(contentType, "video/") ||
+			strings.HasPrefix(contentType, "audio/") ||
 			contentType == "application/pdf") {
 		disposition = "inline"
 	}

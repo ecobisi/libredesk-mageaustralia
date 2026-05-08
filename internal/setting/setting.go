@@ -227,6 +227,22 @@ func (m *Manager) GetPCISettings() (models.PCISettings, error) {
 	return out, nil
 }
 
+// GetAISettings returns AI feature settings (T3v voicemail transcription
+// toggles for now; future AI tiers extend the model). Empty settings are
+// not an error: callers treat TranscriptionEnabled=false as the off state.
+func (m *Manager) GetAISettings() (models.AISettings, error) {
+	var out models.AISettings
+	b, err := m.GetByPrefix("ai.")
+	if err != nil {
+		return out, err
+	}
+	if err := json.Unmarshal([]byte(b), &out); err != nil {
+		m.lo.Error("error unmarshalling AI settings", "error", err)
+		return out, envelope.NewError(envelope.GeneralError, "Error parsing AI settings", nil)
+	}
+	return out, nil
+}
+
 // GetAppRootURL returns the root URL of the app.
 func (m *Manager) GetAppRootURL() (string, error) {
 	rootURL, err := m.Get("app.root_url")

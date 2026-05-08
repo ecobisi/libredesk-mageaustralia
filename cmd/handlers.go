@@ -50,6 +50,9 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	// T3y PCI redaction notification settings.
 	g.GET("/api/v1/settings/pci", perm(handleGetPCISettings, "general_settings:manage"))
 	g.PUT("/api/v1/settings/pci", perm(handleUpdatePCISettings, "general_settings:manage"))
+	// T3v AI feature settings (voicemail transcription toggles).
+	g.GET("/api/v1/settings/ai", perm(handleGetAISettings, "ai:manage"))
+	g.PUT("/api/v1/settings/ai", perm(handleUpdateAISettings, "ai:manage"))
 
 	// OpenID connect single sign-on.
 	g.GET("/api/v1/oidc", perm(handleGetAllOIDC, "oidc:manage"))

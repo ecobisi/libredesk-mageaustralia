@@ -53,3 +53,25 @@ type PCISettings struct {
 	NotifyAgentID int    `json:"pci.notify_agent_id" db:"pci.notify_agent_id"`
 	NotifyMethod  string `json:"pci.notify_method" db:"pci.notify_method"`
 }
+
+// AISettings holds AI feature toggles. Currently scoped to T3v voicemail
+// transcription — the rest of v1.0.3's AI surface (RAG, knowledge sources,
+// external search, per-inbox prompts) lives behind T3a/T3b which haven't
+// been ported yet. New AI fields land here as the relevant tier-3 units
+// arrive.
+//
+// TranscriptionEnabled gates the on-ingest audio-attachment hook in the
+// conversation package. TranscriptionProvider selects the backend:
+//
+//   - "openai" — synchronous Whisper API call via the AI manager's stored
+//     OpenAI key. Costs ~$0.006/min of audio.
+//   - "local"  — drops a job file into transcribeQueueDir for an external
+//     whisper.cpp worker (see transcribe-worker.sh + docs/voice-
+//     transcription.md). Free, runs offline, requires host setup.
+//
+// Empty TranscriptionProvider with TranscriptionEnabled=true is treated as
+// "local" by the orchestrator (matches v1.0.3 default).
+type AISettings struct {
+	TranscriptionEnabled  bool   `json:"ai.transcription_enabled" db:"ai.transcription_enabled"`
+	TranscriptionProvider string `json:"ai.transcription_provider" db:"ai.transcription_provider"`
+}

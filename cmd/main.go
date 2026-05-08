@@ -230,6 +230,10 @@ func main() {
 		conversation                = initConversations(i18n, sla, status, priority, wsHub, db, inbox, user, team, media, settings, csat, automation, template, webhook, notifDispatcher)
 		autoassigner                = initAutoAssigner(team, user, conversation)
 		rateLimiter                 = initRateLimit(rdb)
+		// T3v: hoisted out of the App{} literal so we can wire the
+		// transcribe callback below before conversation.Run() spins up
+		// the incoming-message workers.
+		aiMgr = initAI(db, i18n)
 	)
 
 	wsHub.SetConversationStore(conversation)
@@ -246,6 +250,19 @@ func main() {
 	// inbox pkg owns the IMAP socket. Used by both the manual "Redact Now"
 	// handler and the 7-day auto-redact loop below.
 	conversation.IMAPDeleteFunc = inbox.DeleteIMAPMessage
+
+	// T3v: bridge the conversation pkg's voicemail-transcription pipeline
+	// to the AI manager's OpenAI Whisper client. Per-call lookup so a
+	// fresh API key saved via Admin → AI takes effect without a restart.
+	// nil-safe inside the conversation pkg: a missing/inactive OpenAI
+	// provider returns an error here, the caller logs+skips the audio.
+	conversation.TranscribeFunc = func(audioData []byte, filename string) (string, error) {
+		client := aiMgr.GetOpenAIClient()
+		if client == nil {
+			return "", fmt.Errorf("OpenAI client not configured")
+		}
+		return client.TranscribeAudio(audioData, filename)
+	}
 
 	// Start inboxes.
 	startInboxes(ctx, inbox, conversation, user, conversation.SignAvatarURL)
@@ -302,7 +319,7 @@ func main() {
 		role:             initRole(db, i18n),
 		tag:              initTag(db, i18n),
 		macro:            initMacro(db, i18n),
-		ai:               initAI(db, i18n),
+		ai:               aiMgr,
 		importer:         initImporter(i18n),
 		webhook:          webhook,
 		contextLink:      initContextLink(db, i18n),

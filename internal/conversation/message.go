@@ -1135,6 +1135,13 @@ func (m *Manager) ProcessIncomingMessage(in models.IncomingMessage) (models.Mess
 		go m.notifyParticipants(msg)
 	}
 
+	// T3v: kick off voicemail transcription for any audio attachments.
+	// No-op when transcription is disabled in AI settings (default state).
+	// Each provider runs async internally so this call is fire-and-forget.
+	if len(msg.Media) > 0 {
+		m.transcribeAudioAttachments(msg.ConversationUUID, msg.Media)
+	}
+
 	// Process post-message hooks (automation rules, webhooks, SLA, etc.).
 	if err := m.ProcessIncomingMessageHooks(msg.ConversationUUID, isNewConversation); err != nil {
 		m.lo.Error("error processing incoming message hooks", "conversation_uuid", msg.ConversationUUID, "error", err)

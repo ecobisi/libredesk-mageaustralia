@@ -32,6 +32,7 @@ import {
   List,
   AtSign,
   ShieldAlert,
+  Mic,
   Trash2,
   Settings,
   Clock,
@@ -72,6 +73,7 @@ const navIconMap = {
   UserRound,
   UsersRound,
   Shield,
+  ShieldAlert,
   ScrollText,
   Mail,
   FileText,
@@ -82,6 +84,7 @@ const navIconMap = {
   CircleUser,
   Contact,
   Trash2,
+  Mic,
   Activity
 }
 import {

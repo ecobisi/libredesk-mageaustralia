@@ -103,6 +103,14 @@ type Manager struct {
 	// nil callback skips IMAP cleanup and just notes the redaction in the
 	// activity log.
 	IMAPDeleteFunc func(inboxID int, messageID string) error
+
+	// TranscribeFunc, when set, sends an audio blob to a transcription
+	// service and returns the transcript text. Wired in cmd/main.go to
+	// ai.Manager.GetOpenAIClient().TranscribeAudio so the conversation
+	// package doesn't import the ai package. nil-safe — a nil callback
+	// disables the API transcription path, the local-whisper worker
+	// continues to function via transcribe-worker.sh.
+	TranscribeFunc func(audioData []byte, filename string) (string, error)
 }
 
 // WidgetConversationView represents the conversation data for widget clients
@@ -175,6 +183,7 @@ type settingsStore interface {
 	GetByPrefix(prefix string) (types.JSONText, error)
 	Get(key string) (types.JSONText, error)
 	GetPCISettings() (settingmodels.PCISettings, error)
+	GetAISettings() (settingmodels.AISettings, error)
 }
 
 type csatStore interface {

@@ -48,6 +48,12 @@ export const adminNavItems = [
         href: '/admin/pci',
         permission: 'general_settings:manage',
         icon: 'ShieldAlert'
+      },
+      {
+        titleKey: 'admin.ai.title',
+        href: '/admin/ai',
+        permission: 'ai:manage',
+        icon: 'Mic'
       }
     ]
   },

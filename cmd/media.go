@@ -219,10 +219,13 @@ func serveMediaFile(r *fastglue.Request, app *App, uuid string, media *mmodels.M
 	case "fs":
 		disposition := "attachment"
 
-		// Inline images/videos/pdfs. SVG excluded.
+		// Inline images/videos/audio/pdfs. SVG excluded. Audio is inline
+		// (T3v) so the in-thread <audio> player in MessageAttachmentPreview
+		// can stream the file directly instead of forcing a download.
 		if media.ContentType != "image/svg+xml" &&
 			(strings.HasPrefix(media.ContentType, "image/") ||
 				strings.HasPrefix(media.ContentType, "video/") ||
+				strings.HasPrefix(media.ContentType, "audio/") ||
 				media.ContentType == "application/pdf") {
 			disposition = "inline"
 		}

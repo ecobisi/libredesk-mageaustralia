@@ -214,6 +214,12 @@ const routes = [
             meta: { titleKey: 'admin.pci.title' }
           },
           {
+            path: 'ai',
+            name: 'ai-settings',
+            component: () => import('@main/views/admin/ai/AISettings.vue'),
+            meta: { titleKey: 'admin.ai.title' }
+          },
+          {
             path: 'business-hours',
             component: () => import('@main/views/admin/business-hours/BusinessHours.vue'),
             meta: { titleKey: 'globals.terms.businessHour', titleCount: 2 },

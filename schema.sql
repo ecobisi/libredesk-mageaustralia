@@ -780,7 +780,9 @@ VALUES
     ('trash.auto_trash_resolved_days', '90'::jsonb),
     ('trash.auto_trash_spam_days', '30'::jsonb),
     ('trash.auto_delete_days', '30'::jsonb),
-    ('trash.activity_purge_days', '7'::jsonb);
+    ('trash.activity_purge_days', '7'::jsonb),
+    ('ai.transcription_enabled', 'false'::jsonb),
+    ('ai.transcription_provider', '"local"'::jsonb);
 
 -- Default conversation priorities
 INSERT INTO conversation_priorities (name) VALUES

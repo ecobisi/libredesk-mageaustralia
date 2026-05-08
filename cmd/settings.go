@@ -204,6 +204,37 @@ func handleGetPCISettings(r *fastglue.Request) error {
 	return r.SendEnvelope(json.RawMessage(out))
 }
 
+// handleGetAISettings returns the "ai."-prefixed settings envelope (T3v
+// voicemail-transcription toggles for now). Same shape as the trash/PCI
+// endpoints — frontend drives a generic key/value form.
+func handleGetAISettings(r *fastglue.Request) error {
+	app := r.Context.(*App)
+	out, err := app.setting.GetByPrefix("ai.")
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(json.RawMessage(out))
+}
+
+// handleUpdateAISettings updates the "ai."-prefixed settings (currently
+// voicemail-transcription toggles). The transcription pipeline reads via
+// settings.GetAISettings on each incoming message, so changes take effect
+// for the next inbound voicemail without a restart.
+func handleUpdateAISettings(r *fastglue.Request) error {
+	app := r.Context.(*App)
+	var req models.AISettings
+	if err := r.Decode(&req, "json"); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
+	}
+	if req.TranscriptionProvider != "" && req.TranscriptionProvider != "openai" && req.TranscriptionProvider != "local" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid transcription provider. Use: openai or local", nil, envelope.InputError)
+	}
+	if err := app.setting.Update(req); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(true)
+}
+
 // handleUpdatePCISettings updates PCI redaction notification settings.
 //
 // notify_method is one of "in_app" / "email" / "both" (or empty, treated as
