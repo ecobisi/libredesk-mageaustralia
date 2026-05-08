@@ -65,7 +65,7 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.POST("/api/v1/rag/sources/{id}/sync", perm(handleSyncRAGSource, "ai:manage"))
 	g.POST("/api/v1/rag/upload", perm(handleRAGFileUpload, "ai:manage"))
 	g.POST("/api/v1/rag/search", perm(handleRAGSearch, "ai:manage"))
-	g.POST("/api/v1/rag/generate", perm(handleRAGGenerateResponse, "conversations:write"))
+	g.POST("/api/v1/rag/generate", perm(handleRAGGenerateResponse, "messages:write"))
 
 	// OpenID connect single sign-on.
 	g.GET("/api/v1/oidc", perm(handleGetAllOIDC, "oidc:manage"))
