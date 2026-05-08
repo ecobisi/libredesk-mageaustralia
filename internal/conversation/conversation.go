@@ -1419,6 +1419,15 @@ func (m *Manager) NotifyMention(conversationUUID string, message models.Message,
 						"Priority":        conversation.Priority.String,
 						"UUID":            conversation.UUID,
 					},
+					// FS24: expose Contact in the mention notification template
+					// so it can render the customer name in the body, matching
+					// other notification templates that include Contact context.
+					"Contact": map[string]any{
+						"FirstName": conversation.Contact.FirstName,
+						"LastName":  conversation.Contact.LastName,
+						"FullName":  conversation.Contact.FullName(),
+						"Email":     conversation.Contact.Email.String,
+					},
 					"Recipient": map[string]any{
 						"FirstName": recipient.FirstName,
 						"LastName":  recipient.LastName,

@@ -452,7 +452,7 @@ const hasTextContent = computed(() => {
  * attachments doesn't surface the button.
  */
 const hasDraftContent = computed(() => {
-  return hasTextContent.value || mediaFiles.value.length > 0
+  return hasTextContent.value || mediaFiles.value.length > 0 || mentions.value.length > 0
 })
 
 /**
@@ -497,7 +497,10 @@ const processSend = async (skipContactEmailCheck = false, skipMissingTagsCheck =
   let hasMessageSendingErrored = false
   isEditorFullscreen.value = false
 
-  const hasContent = hasTextContent.value > 0 || mediaFiles.value.length > 0
+  // FS24: mention-only private notes (e.g. "@john") still send. TipTap mention
+  // nodes don't always count toward textContent, so without this gate a
+  // private note that is just an @mention would silently no-op.
+  const hasContent = hasTextContent.value > 0 || mediaFiles.value.length > 0 || mentions.value.length > 0
   const convUUID = conversationStore.current.uuid
   const isPrivate = messageType.value === 'private_note'
   const isForward = messageType.value === 'forward'

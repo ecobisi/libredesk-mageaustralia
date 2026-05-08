@@ -112,6 +112,38 @@ const scrollToBottom = () => {
   }, 50)
 }
 
+// FS24: Scroll the last non-activity message to the top of the viewport
+// (instead of scrolling to the very bottom). Activity rows tend to be the
+// most recent entries (status changes, assignment events) and pinning them
+// to the bottom hides the actual conversation thread on open. Falls back to
+// scrollToBottom if no non-activity message is found, or if its DOM node
+// hasn't been rendered yet.
+const scrollToLastMessage = () => {
+  setTimeout(() => {
+    const thread = threadEl.value
+    if (!thread) return
+    const messages = conversationStore.conversationMessages
+    let lastMsg = null
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].type !== 'activity') {
+        lastMsg = messages[i]
+        break
+      }
+    }
+    if (!lastMsg) {
+      scrollToBottom()
+      return
+    }
+    const messageEl = thread.querySelector(`[data-message-uuid="${lastMsg.uuid}"]`)
+    if (messageEl) {
+      // Small offset for breathing room above the message.
+      thread.scrollTop = Math.max(0, messageEl.offsetTop - 12)
+    } else {
+      scrollToBottom()
+    }
+  }, 150)
+}
+
 const scrollToMessage = (messageUUID) => {
   if (!messageUUID) {
     scrollToBottom()
@@ -189,8 +221,8 @@ watch(
         // Mentioned conversation - only scroll to message, NOT to bottom
         scrollToMessage(scrollToUUID)
       } else {
-        // Normal conversation - scroll to bottom
-        scrollToBottom()
+        // Normal conversation - scroll to top of last non-activity message.
+        scrollToLastMessage()
       }
     }
   }

@@ -92,5 +92,7 @@ SELECT *, COUNT(*) OVER() AS total FROM (
        )
     ORDER BY c.id
 ) sub
-ORDER BY created_at DESC
+ORDER BY
+    CASE WHEN reference_number::text = $1 THEN 0 ELSE 1 END,
+    created_at DESC
 LIMIT $2 OFFSET $3;
