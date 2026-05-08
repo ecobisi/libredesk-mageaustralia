@@ -216,18 +216,44 @@ func handleGetAISettings(r *fastglue.Request) error {
 	return r.SendEnvelope(json.RawMessage(out))
 }
 
-// handleUpdateAISettings updates the "ai."-prefixed settings (currently
-// voicemail-transcription toggles). The transcription pipeline reads via
-// settings.GetAISettings on each incoming message, so changes take effect
-// for the next inbound voicemail without a restart.
+// handleUpdateAISettings updates the "ai."-prefixed settings (T3v
+// voicemail-transcription toggles + T3c RAG system prompt + tuning).
+// The transcription pipeline reads via settings.GetAISettings on each
+// incoming message, and the RAG handler does the same on each
+// generate-response call, so changes take effect immediately without a
+// restart.
+//
+// Partial-save merge: AISettings has no `omitempty` on JSON tags
+// (intentional — admins must be able to set fields back to their zero
+// value, e.g. clear a custom system prompt to revert to the default,
+// or disable transcription). Without merging, a partial save from one
+// of the cards on the AISettings.vue page would clobber the others
+// with zero defaults. We pre-fetch current settings into the request
+// struct, then Decode overlays only the fields actually present in
+// the JSON body. Mirrors the pattern v1.0.3 used for password-field
+// preservation, generalised here so any subset save round-trips cleanly.
 func handleUpdateAISettings(r *fastglue.Request) error {
 	app := r.Context.(*App)
-	var req models.AISettings
+	cur, err := app.setting.GetAISettings()
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	req := cur
 	if err := r.Decode(&req, "json"); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
 	}
 	if req.TranscriptionProvider != "" && req.TranscriptionProvider != "openai" && req.TranscriptionProvider != "local" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid transcription provider. Use: openai or local", nil, envelope.InputError)
+	}
+	// Clamp the tuning numerics to reject malformed input outright (the
+	// rag.go handler also has runtime fallbacks for stale rows, but
+	// silent acceptance of nonsense at save-time would let admins
+	// believe a value is in effect when it's actually being ignored).
+	if req.MaxContextChunks < 0 || req.MaxContextChunks > 50 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "max_context_chunks must be between 0 and 50", nil, envelope.InputError)
+	}
+	if req.SimilarityThreshold < 0 || req.SimilarityThreshold > 1 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "similarity_threshold must be between 0 and 1", nil, envelope.InputError)
 	}
 	if err := app.setting.Update(req); err != nil {
 		return sendErrorEnvelope(r, err)

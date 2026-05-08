@@ -2,12 +2,17 @@
   AISettings — admin page for AI provider configuration + voicemail
   transcription.
 
-  Two unrelated subsystems share this page because they both live behind
-  the `ai:manage` permission and the `admin/ai` route:
+  Three independent subsystems share this page because they all live
+  behind the `ai:manage` permission and the `admin/ai` route:
 
   - T3b providers: OpenAI / OpenRouter API-key + model + default-flag
     management. Backed by /api/v1/ai/providers and friends.
   - T3v transcription: a tiny key/value form against `setting.ai.*`.
+  - T3c RAG settings: system-prompt template + max-chunks + similarity-
+    threshold tuning for the "Generate Response" button. Backed by the
+    same /api/v1/settings/ai endpoint as transcription; the backend
+    merges partial saves so each card can submit only its own fields
+    without clobbering the others.
 
   Each subsystem is a self-contained card so they can be evolved
   independently. The page renders nothing until both finish loading so
@@ -161,6 +166,67 @@
           </CardContent>
         </Card>
 
+        <!-- T3c: RAG system prompt + tuning -->
+        <Card>
+          <CardHeader>
+            <div class="flex items-center gap-2">
+              <Bot class="h-5 w-5" />
+              <CardTitle>{{ t('admin.ai.rag.title') }}</CardTitle>
+            </div>
+            <CardDescription>{{ t('admin.ai.rag.description') }}</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-4">
+            <div class="space-y-2">
+              <Label for="ai-system-prompt">{{ t('admin.ai.rag.systemPrompt') }}</Label>
+              <Textarea
+                id="ai-system-prompt"
+                v-model="systemPrompt"
+                rows="8"
+                :placeholder="t('admin.ai.rag.systemPromptPlaceholder')"
+                class="font-mono text-sm"
+              />
+              <p class="text-xs text-muted-foreground">
+                {{ t('admin.ai.rag.systemPromptHelp') }}
+              </p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <Label for="ai-max-chunks">{{ t('admin.ai.rag.maxContextChunks') }}</Label>
+                <Input
+                  id="ai-max-chunks"
+                  v-model.number="maxContextChunks"
+                  type="number"
+                  min="1"
+                  max="50"
+                />
+                <p class="text-xs text-muted-foreground">
+                  {{ t('admin.ai.rag.maxContextChunksHelp') }}
+                </p>
+              </div>
+
+              <div class="space-y-2">
+                <Label for="ai-similarity">{{ t('admin.ai.rag.similarityThreshold') }}</Label>
+                <Input
+                  id="ai-similarity"
+                  v-model.number="similarityThreshold"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                />
+                <p class="text-xs text-muted-foreground">
+                  {{ t('admin.ai.rag.similarityThresholdHelp') }}
+                </p>
+              </div>
+            </div>
+
+            <Button @click="saveRAGSettings" :isLoading="savingRAG">
+              {{ t('globals.messages.save') }}
+            </Button>
+          </CardContent>
+        </Card>
+
         <!-- T3v: voicemail transcription -->
         <form @submit.prevent="onSubmitTranscription" class="space-y-6 w-full max-w-xl">
           <h2 class="text-base font-medium">{{ t('admin.ai.transcription.title') }}</h2>
@@ -228,6 +294,7 @@ import { Label } from '@shared-ui/components/ui/label'
 import { Switch } from '@shared-ui/components/ui/switch'
 import { Spinner } from '@shared-ui/components/ui/spinner'
 import { Input } from '@shared-ui/components/ui/input'
+import { Textarea } from '@shared-ui/components/ui/textarea'
 import { Badge } from '@shared-ui/components/ui/badge'
 import {
   Card,
@@ -278,6 +345,14 @@ const currentDefaultProvider = computed(
 const savingTranscription = ref(false)
 const transcriptionEnabled = ref(false)
 const transcriptionProvider = ref('local')
+
+// T3c RAG settings state. Defaults mirror cmd/rag.go's runtime fallbacks
+// so a fresh page (no settings persisted yet) reflects what the backend
+// would actually apply if the admin saves without changing anything.
+const savingRAG = ref(false)
+const systemPrompt = ref('')
+const maxContextChunks = ref(5)
+const similarityThreshold = ref(0.25)
 
 const showToast = (description, variant) =>
   emitter.emit(EMITTER_EVENTS.SHOW_TOAST, variant ? { variant, description } : { description })
@@ -374,7 +449,13 @@ async function testProvider(provider) {
   }
 }
 
-async function loadTranscriptionSettings() {
+// loadAISettings reads all `ai.`-prefixed settings in one call and
+// hydrates both the T3v transcription form and the T3c RAG form.
+// Single source of truth — the backend GET returns the whole envelope
+// in one shot, and the partial-save merge in handleUpdateAISettings
+// means each form can submit only its own fields without clobbering
+// the other.
+async function loadAISettings() {
   try {
     const res = await api.getSettings('ai')
     const data = res.data?.data || {}
@@ -383,6 +464,15 @@ async function loadTranscriptionSettings() {
     }
     if (data['ai.transcription_provider']) {
       transcriptionProvider.value = data['ai.transcription_provider']
+    }
+    if (data['ai.system_prompt'] !== undefined) {
+      systemPrompt.value = data['ai.system_prompt'] || ''
+    }
+    if (data['ai.max_context_chunks']) {
+      maxContextChunks.value = data['ai.max_context_chunks']
+    }
+    if (data['ai.similarity_threshold']) {
+      similarityThreshold.value = data['ai.similarity_threshold']
     }
   } catch (err) {
     showToast(handleHTTPError(err).message, 'destructive')
@@ -404,8 +494,37 @@ const onSubmitTranscription = async () => {
   }
 }
 
+// saveRAGSettings persists only the three RAG fields. The backend's
+// merge logic preserves transcription settings, so this card and the
+// transcription form below it are independently saveable.
+async function saveRAGSettings() {
+  const chunks = parseInt(maxContextChunks.value, 10)
+  const threshold = parseFloat(similarityThreshold.value)
+  if (!Number.isFinite(chunks) || chunks < 1 || chunks > 50) {
+    showToast(t('admin.ai.rag.maxContextChunksInvalid'), 'destructive')
+    return
+  }
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    showToast(t('admin.ai.rag.similarityThresholdInvalid'), 'destructive')
+    return
+  }
+  savingRAG.value = true
+  try {
+    await api.updateSettings('ai', {
+      'ai.system_prompt': systemPrompt.value || '',
+      'ai.max_context_chunks': chunks,
+      'ai.similarity_threshold': threshold
+    })
+    showToast(t('globals.messages.savedSuccessfully'))
+  } catch (err) {
+    showToast(handleHTTPError(err).message, 'destructive')
+  } finally {
+    savingRAG.value = false
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([fetchProviders(), fetchModels(), loadTranscriptionSettings()])
+  await Promise.all([fetchProviders(), fetchModels(), loadAISettings()])
   isLoading.value = false
 })
 </script>
