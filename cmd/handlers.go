@@ -73,6 +73,17 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	g.POST("/api/v1/rag/search", perm(handleRAGSearch, "ai:manage"))
 	g.POST("/api/v1/rag/generate", perm(handleRAGGenerateResponse, "messages:write"))
 
+	// T3q Ecommerce integration. Settings/test/lookup endpoints are admin-only
+	// (`general_settings:manage`, matches v1.0.3); the configured-status probe
+	// is auth-only so any agent can conditionally render ecommerce affordances
+	// in the reply UI.
+	g.GET("/api/v1/ecommerce/settings", perm(handleGetEcommerceSettings, "general_settings:manage"))
+	g.PUT("/api/v1/ecommerce/settings", perm(handleUpdateEcommerceSettings, "general_settings:manage"))
+	g.POST("/api/v1/ecommerce/test", perm(handleTestEcommerceConnection, "general_settings:manage"))
+	g.GET("/api/v1/ecommerce/status", auth(handleGetEcommerceStatus))
+	g.GET("/api/v1/ecommerce/test/customer", perm(handleTestEcommerceCustomerLookup, "general_settings:manage"))
+	g.GET("/api/v1/ecommerce/test/order", perm(handleTestEcommerceOrderLookup, "general_settings:manage"))
+
 	// OpenID connect single sign-on.
 	g.GET("/api/v1/oidc", perm(handleGetAllOIDC, "oidc:manage"))
 	g.POST("/api/v1/oidc", perm(handleCreateOIDC, "oidc:manage"))

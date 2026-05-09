@@ -58,6 +58,9 @@ func New(opts Opts) (*Manager, error) {
 	// Fields that need encryption.
 	encryptedFields := map[string]bool{
 		"notification.email.password": true,
+		// T3q ecommerce integration. Auto-encrypt the OAuth2 client secret
+		// when written via setting.Update, decrypt on GetByPrefix.
+		"ecommerce.client_secret": true,
 	}
 
 	return &Manager{

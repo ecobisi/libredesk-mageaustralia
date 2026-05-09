@@ -38,6 +38,7 @@ import (
 	"github.com/abhinavxd/libredesk/internal/conversation"
 	"github.com/abhinavxd/libredesk/internal/conversation/priority"
 	"github.com/abhinavxd/libredesk/internal/conversation/status"
+	"github.com/abhinavxd/libredesk/internal/ecommerce"
 	"github.com/abhinavxd/libredesk/internal/importer"
 	"github.com/abhinavxd/libredesk/internal/inbox"
 	"github.com/abhinavxd/libredesk/internal/media"
@@ -106,6 +107,9 @@ type App struct {
 	ai               *ai.Manager
 	rag              *rag.Manager
 	ragSync          *ragsync.Coordinator
+	// T3q ecommerce integration: nil when no provider is configured. Both the
+	// HTTP handlers and the RAG context-gathering path nil-check before use.
+	ecommerce *ecommerce.Manager
 	// extSearchClient is the SSRF-guarded HTTP client used by T3d's
 	// external-search-API integration in cmd/rag.go. URLs are admin-
 	// supplied so DNS-rebinding-safe egress is mandatory; the dialer
@@ -354,6 +358,13 @@ func main() {
 		userNotification: userNotification,
 	}
 	app.consts.Store(constants)
+
+	// T3q: initialize ecommerce manager from stored settings. Missing/invalid
+	// config is not fatal — app.ecommerce stays nil and handlers + RAG path
+	// nil-check before use.
+	if err := initEcommerceManager(app); err != nil {
+		lo.Warn("failed to initialize ecommerce manager", "error", err)
+	}
 
 	g := fastglue.NewGlue()
 	g.SetContext(app)
