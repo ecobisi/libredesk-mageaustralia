@@ -226,6 +226,12 @@ const routes = [
             meta: { titleKey: 'admin.knowledgeSources.title' }
           },
           {
+            path: 'ecommerce',
+            name: 'ecommerce-settings',
+            component: () => import('@main/views/admin/ecommerce/EcommerceSettings.vue'),
+            meta: { titleKey: 'admin.ecommerce.title' }
+          },
+          {
             path: 'business-hours',
             component: () => import('@main/views/admin/business-hours/BusinessHours.vue'),
             meta: { titleKey: 'globals.terms.businessHour', titleCount: 2 },

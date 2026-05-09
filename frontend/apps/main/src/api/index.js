@@ -535,6 +535,40 @@ const updateInboxAISettings = (inboxId, data) =>
 const deleteInboxAISettings = (inboxId) =>
   http.delete(`/api/v1/settings/ai/inbox/${inboxId}`)
 
+// T3p Ecommerce admin settings + diagnostic lookup helpers.
+//
+// settings get/put: feed the EcommerceSettings.vue form.
+// status: cheap probe so any agent can conditionally render ecommerce
+//   affordances (e.g. the "+ Orders" button); auth-only on the server,
+//   not gated on general_settings:manage.
+// test: POST a candidate config (without saving) to verify auth works.
+// test/customer + test/order: diagnostic lookups against the live
+//   integration; 30s timeout because external Magento/Maho calls can
+//   be slow and the default 10s would falsely surface as timeouts.
+//
+// All six are exported in the default object below — v1.0.3 commit
+// 954797de defined testEcommerceCustomer / testEcommerceOrder but
+// forgot the export, so the lookup buttons silently noop'd until that
+// was fixed. We export them explicitly here to avoid repeating that.
+const getEcommerceSettings = () => http.get('/api/v1/ecommerce/settings')
+const updateEcommerceSettings = (data) =>
+  http.put('/api/v1/ecommerce/settings', data, {
+    headers: { 'Content-Type': 'application/json' }
+  })
+const getEcommerceStatus = () => http.get('/api/v1/ecommerce/status')
+const testEcommerceConnection = (data) =>
+  http.post('/api/v1/ecommerce/test', data, {
+    headers: { 'Content-Type': 'application/json' }
+  })
+const testEcommerceCustomer = (email) =>
+  http.get(`/api/v1/ecommerce/test/customer?email=${encodeURIComponent(email)}`, {
+    timeout: 30000
+  })
+const testEcommerceOrder = (orderNumber) =>
+  http.get(`/api/v1/ecommerce/test/order?order_number=${encodeURIComponent(orderNumber)}`, {
+    timeout: 30000
+  })
+
 // T3a RAG knowledge sources + generate-response endpoint.
 const getRAGSources = () => http.get('/api/v1/rag/sources')
 const getRAGSource = (id) => http.get(`/api/v1/rag/sources/${id}`)
@@ -730,6 +764,12 @@ export default {
   ragSearch,
   ragGenerate,
   ragFileUpload,
+  getEcommerceSettings,
+  updateEcommerceSettings,
+  getEcommerceStatus,
+  testEcommerceConnection,
+  testEcommerceCustomer,
+  testEcommerceOrder,
   createAutomationRule,
   toggleAutomationRule,
   deleteAutomationRule,

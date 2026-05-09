@@ -210,6 +210,12 @@ export const adminNavItems = [
         permission: 'context_links:manage',
         isTitleKeyPlural: true,
         icon: 'Link'
+      },
+      {
+        titleKey: 'admin.ecommerce.title',
+        href: '/admin/ecommerce',
+        permission: 'general_settings:manage',
+        icon: 'ShoppingCart'
       }
     ]
   }
