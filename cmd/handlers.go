@@ -53,6 +53,12 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	// T3v AI feature settings (voicemail transcription toggles).
 	g.GET("/api/v1/settings/ai", perm(handleGetAISettings, "ai:manage"))
 	g.PUT("/api/v1/settings/ai", perm(handleUpdateAISettings, "ai:manage"))
+	// T3h Per-inbox AI settings overrides (system prompt, RAG tuning,
+	// external search, knowledge source filter). Falls back to the
+	// global ai.* settings when no row exists for the inbox.
+	g.GET("/api/v1/settings/ai/inbox/{id}", perm(handleGetInboxAISettings, "ai:manage"))
+	g.PUT("/api/v1/settings/ai/inbox/{id}", perm(handleUpdateInboxAISettings, "ai:manage"))
+	g.DELETE("/api/v1/settings/ai/inbox/{id}", perm(handleDeleteInboxAISettings, "ai:manage"))
 	// T3a RAG knowledge sources + generate-response endpoint.
 	// Source CRUD is admin-only (`ai:manage`); the generate path is
 	// surfaced to anyone with `conversations:write` so agents can

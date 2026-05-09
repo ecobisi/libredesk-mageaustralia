@@ -25,6 +25,7 @@ import (
 	"github.com/abhinavxd/libredesk/internal/rag/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/knadh/go-i18n"
+	"github.com/lib/pq"
 	"github.com/zerodha/logf"
 )
 
@@ -277,13 +278,20 @@ func (m *Manager) AddDocument(sourceID int, sourceRef, title, content string, me
 // rows with cosine similarity >= `threshold`. limit/threshold validation
 // (default 5 / 0.25) lives at the cmd handler — this method trusts its
 // inputs.
-func (m *Manager) Search(query string, limit int, threshold float64) ([]models.SearchResult, error) {
+//
+// Optional sourceIDs (T3h) restricts the search to a subset of
+// rag_sources.id. Empty (or omitted) means "search all sources" — the
+// pre-T3h behaviour. When non-empty, an `AND source_id = ANY($4)` clause
+// filters the pgvector match. Used by the per-inbox AI settings override
+// to scope a specific inbox's Generate Response to a curated set of
+// knowledge sources rather than the whole catalogue.
+func (m *Manager) Search(query string, limit int, threshold float64, sourceIDs ...int) ([]models.SearchResult, error) {
 	if m.embeddingFunc == nil {
 		m.lo.Error("embedding function not configured")
 		return nil, fmt.Errorf("embedding function not configured")
 	}
 
-	m.lo.Info("RAG search started", "limit", limit, "threshold", threshold)
+	m.lo.Info("RAG search started", "limit", limit, "threshold", threshold, "source_ids", sourceIDs)
 
 	embedding, err := m.embeddingFunc(query)
 	if err != nil {
@@ -294,18 +302,36 @@ func (m *Manager) Search(query string, limit int, threshold float64) ([]models.S
 	embeddingStr := Float32SliceToVector(embedding)
 
 	results := make([]models.SearchResult, 0)
-	if err := m.db.Select(&results, `
-		SELECT
-			id, created_at, updated_at, source_id, source_ref, title, content, content_hash, metadata,
-			1 - (embedding <=> $1::vector) as similarity
-		FROM rag_documents
-		WHERE embedding IS NOT NULL
-			AND 1 - (embedding <=> $1::vector) >= $3
-		ORDER BY embedding <=> $1::vector
-		LIMIT $2
-	`, embeddingStr, limit, threshold); err != nil {
-		m.lo.Error("error searching documents", "error", err)
-		return nil, fmt.Errorf("searching documents: %w", err)
+	if len(sourceIDs) > 0 {
+		// T3h: scope to a subset of rag_sources.
+		if err := m.db.Select(&results, `
+			SELECT
+				id, created_at, updated_at, source_id, source_ref, title, content, content_hash, metadata,
+				1 - (embedding <=> $1::vector) as similarity
+			FROM rag_documents
+			WHERE embedding IS NOT NULL
+				AND 1 - (embedding <=> $1::vector) >= $3
+				AND source_id = ANY($4)
+			ORDER BY embedding <=> $1::vector
+			LIMIT $2
+		`, embeddingStr, limit, threshold, pq.Array(sourceIDs)); err != nil {
+			m.lo.Error("error searching documents", "error", err)
+			return nil, fmt.Errorf("searching documents: %w", err)
+		}
+	} else {
+		if err := m.db.Select(&results, `
+			SELECT
+				id, created_at, updated_at, source_id, source_ref, title, content, content_hash, metadata,
+				1 - (embedding <=> $1::vector) as similarity
+			FROM rag_documents
+			WHERE embedding IS NOT NULL
+				AND 1 - (embedding <=> $1::vector) >= $3
+			ORDER BY embedding <=> $1::vector
+			LIMIT $2
+		`, embeddingStr, limit, threshold); err != nil {
+			m.lo.Error("error searching documents", "error", err)
+			return nil, fmt.Errorf("searching documents: %w", err)
+		}
 	}
 
 	m.lo.Info("RAG search complete", "results_count", len(results))

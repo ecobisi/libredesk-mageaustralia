@@ -331,6 +331,9 @@ LIMIT 200;
 -- name: get-conversation-uuid
 SELECT uuid from conversations where id = $1;
 
+-- name: get-conversation-inbox-id
+SELECT inbox_id FROM conversations WHERE id = $1;
+
 -- name: update-conversation-assigned-user
 UPDATE conversations
 SET assigned_user_id = $2,

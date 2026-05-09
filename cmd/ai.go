@@ -1,8 +1,12 @@
 package main
 
 import (
+	"strconv"
+
 	"github.com/abhinavxd/libredesk/internal/ai"
 	"github.com/abhinavxd/libredesk/internal/envelope"
+	settingmodels "github.com/abhinavxd/libredesk/internal/setting/models"
+	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
 
@@ -141,4 +145,78 @@ func handleTestAIProvider(r *fastglue.Request) error {
 		return sendErrorEnvelope(r, err)
 	}
 	return r.SendEnvelope("Connection successful")
+}
+
+// T3h: handleGetInboxAISettings returns AI settings for a specific
+// inbox. When the inbox has no override row, returns an empty
+// InboxAISettings struct (with id=0, inbox_id set) so the frontend can
+// distinguish "no override, show global defaults" from a real saved
+// row (id > 0).
+func handleGetInboxAISettings(r *fastglue.Request) error {
+	app := r.Context.(*App)
+	id, err := strconv.Atoi(r.RequestCtx.UserValue("id").(string))
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.invalid", "name", "`id`"), nil, envelope.InputError)
+	}
+	out, err := app.setting.GetInboxAISettings(id)
+	if err != nil {
+		// No row -> empty struct so the frontend renders the
+		// global-defaults fallback state. We don't surface the
+		// underlying sql.ErrNoRows as a 500 because "no override" is
+		// the dominant case.
+		return r.SendEnvelope(settingmodels.InboxAISettings{InboxID: id})
+	}
+	return r.SendEnvelope(out)
+}
+
+// T3h: handleUpdateInboxAISettings creates or updates AI settings for
+// an inbox. Numeric ranges are validated to match handleUpdateAISettings
+// (see settings.go) so the per-inbox surface is no laxer than the
+// global form.
+func handleUpdateInboxAISettings(r *fastglue.Request) error {
+	app := r.Context.(*App)
+	id, err := strconv.Atoi(r.RequestCtx.UserValue("id").(string))
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.invalid", "name", "`id`"), nil, envelope.InputError)
+	}
+
+	var req settingmodels.InboxAISettings
+	if err := r.Decode(&req, "json"); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
+	}
+	req.InboxID = id
+
+	// Mirror the global handleUpdateAISettings range checks. Per-inbox
+	// rows feed the same RAG runtime path, so any value the global
+	// form would reject is also nonsense here.
+	if req.MaxContextChunks < 0 || req.MaxContextChunks > 50 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "max_context_chunks must be between 0 and 50", nil, envelope.InputError)
+	}
+	if req.SimilarityThreshold < 0 || req.SimilarityThreshold > 1 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "similarity_threshold must be between 0 and 1", nil, envelope.InputError)
+	}
+	if req.ExternalSearchMaxResults < 0 || req.ExternalSearchMaxResults > 10 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "external_search_max_results must be between 0 and 10", nil, envelope.InputError)
+	}
+
+	out, err := app.setting.UpsertInboxAISettings(req)
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(out)
+}
+
+// T3h: handleDeleteInboxAISettings removes a per-inbox AI settings row
+// so the RAG pipeline falls back to global settings on the next
+// generate call.
+func handleDeleteInboxAISettings(r *fastglue.Request) error {
+	app := r.Context.(*App)
+	id, err := strconv.Atoi(r.RequestCtx.UserValue("id").(string))
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.invalid", "name", "`id`"), nil, envelope.InputError)
+	}
+	if err := app.setting.DeleteInboxAISettings(id); err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(true)
 }

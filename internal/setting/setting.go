@@ -41,6 +41,10 @@ type queries struct {
 	GetAll      *sqlx.Stmt `query:"get-all"`
 	Update      *sqlx.Stmt `query:"update"`
 	GetByPrefix *sqlx.Stmt `query:"get-by-prefix"`
+	// T3h per-inbox AI settings.
+	GetInboxAISettings    *sqlx.Stmt `query:"get-inbox-ai-settings"`
+	UpsertInboxAISettings *sqlx.Stmt `query:"upsert-inbox-ai-settings"`
+	DeleteInboxAISettings *sqlx.Stmt `query:"delete-inbox-ai-settings"`
 }
 
 // New creates and returns a new instance of the Manager.
@@ -241,6 +245,85 @@ func (m *Manager) GetAISettings() (models.AISettings, error) {
 		return out, envelope.NewError(envelope.GeneralError, "Error parsing AI settings", nil)
 	}
 	return out, nil
+}
+
+// GetInboxAISettings retrieves AI settings for a specific inbox (T3h).
+// Returns the row if one exists, or sql.ErrNoRows wrapped via the prepared
+// statement if the inbox has no override configured. Callers that need
+// fallback-to-global semantics should use GetEffectiveAISettings instead.
+func (m *Manager) GetInboxAISettings(inboxID int) (models.InboxAISettings, error) {
+	var out models.InboxAISettings
+	if err := m.q.GetInboxAISettings.Get(&out, inboxID); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// UpsertInboxAISettings creates or updates AI settings for an inbox (T3h).
+// KnowledgeSourceIDs defaults to "[]" so the jsonb NOT NULL column is
+// satisfied even when the admin saves without picking sources (an empty
+// array means "search all sources" — matches the global behaviour).
+func (m *Manager) UpsertInboxAISettings(s models.InboxAISettings) (models.InboxAISettings, error) {
+	var out models.InboxAISettings
+	if s.KnowledgeSourceIDs == nil || len(s.KnowledgeSourceIDs) == 0 {
+		s.KnowledgeSourceIDs = []byte("[]")
+	}
+	if err := m.q.UpsertInboxAISettings.Get(&out,
+		s.InboxID, s.SystemPrompt, s.MaxContextChunks,
+		s.SimilarityThreshold, s.ExternalSearchEnabled, s.ExternalSearchURL,
+		s.ExternalSearchMaxResults, s.ExternalSearchEndpoints, s.ExternalSearchHeaders,
+		s.KnowledgeSourceIDs,
+	); err != nil {
+		m.lo.Error("error upserting inbox AI settings", "inbox_id", s.InboxID, "error", err)
+		return out, envelope.NewError(envelope.GeneralError, "Error saving inbox AI settings", nil)
+	}
+	return out, nil
+}
+
+// DeleteInboxAISettings removes AI settings for an inbox so the RAG
+// pipeline falls back to global settings on the next generate call (T3h).
+func (m *Manager) DeleteInboxAISettings(inboxID int) error {
+	if _, err := m.q.DeleteInboxAISettings.Exec(inboxID); err != nil {
+		m.lo.Error("error deleting inbox AI settings", "inbox_id", inboxID, "error", err)
+		return envelope.NewError(envelope.GeneralError, "Error deleting inbox AI settings", nil)
+	}
+	return nil
+}
+
+// GetEffectiveAISettings returns inbox-specific AI settings if a row exists
+// for the inbox, otherwise projects the global AISettings into the same
+// shape (T3h). Used by the RAG generate handler so call-site code is
+// inbox-id agnostic — pass 0 (or an inbox without an override) and the
+// function returns the global config; pass an inbox with a row and the
+// per-inbox values are returned.
+//
+// On the global-fallback path, KnowledgeSourceIDs is "[]" so RAG search
+// runs against all sources (matches pre-T3h behaviour). Per-inbox rows
+// can supply a non-empty array to scope search to specific sources.
+func (m *Manager) GetEffectiveAISettings(inboxID int) (models.InboxAISettings, error) {
+	if inboxID > 0 {
+		out, err := m.GetInboxAISettings(inboxID)
+		if err == nil {
+			return out, nil
+		}
+		// Not found -> fall through to global.
+	}
+
+	global, err := m.GetAISettings()
+	if err != nil {
+		return models.InboxAISettings{}, err
+	}
+	return models.InboxAISettings{
+		SystemPrompt:             global.SystemPrompt,
+		MaxContextChunks:         global.MaxContextChunks,
+		SimilarityThreshold:      global.SimilarityThreshold,
+		ExternalSearchEnabled:    global.ExternalSearchEnabled,
+		ExternalSearchURL:        global.ExternalSearchURL,
+		ExternalSearchMaxResults: global.ExternalSearchMaxResults,
+		ExternalSearchEndpoints:  global.ExternalSearchEndpoints,
+		ExternalSearchHeaders:    global.ExternalSearchHeaders,
+		KnowledgeSourceIDs:       []byte("[]"),
+	}, nil
 }
 
 // GetAppRootURL returns the root URL of the app.

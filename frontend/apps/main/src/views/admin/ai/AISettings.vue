@@ -2,7 +2,7 @@
   AISettings — admin page for AI provider configuration + voicemail
   transcription.
 
-  Three independent subsystems share this page because they all live
+  Five independent subsystems share this page because they all live
   behind the `ai:manage` permission and the `admin/ai` route:
 
   - T3b providers: OpenAI / OpenRouter API-key + model + default-flag
@@ -13,6 +13,13 @@
     same /api/v1/settings/ai endpoint as transcription; the backend
     merges partial saves so each card can submit only its own fields
     without clobbering the others.
+  - T3d External search settings.
+  - T3h Per-inbox AI settings overrides — an inbox-scope dropdown lets
+    an admin save the RAG / External-Search / Knowledge-sources values
+    against a specific inbox instead of the global config. When a row
+    exists for an inbox, the RAG generate path uses it instead of the
+    global ai.* settings. Provider config + voicemail transcription
+    remain global (no per-inbox use case today).
 
   Each subsystem is a self-contained card so they can be evolved
   independently. The page renders nothing until both finish loading so
@@ -166,6 +173,53 @@
           </CardContent>
         </Card>
 
+        <!-- T3h: Inbox scope selector — flips the RAG/External-Search/
+             Knowledge-sources cards below between editing the global
+             ai.* settings and editing a per-inbox override row. -->
+        <Card>
+          <CardHeader>
+            <div class="flex items-center gap-2">
+              <Inbox class="h-5 w-5" />
+              <CardTitle>{{ t('admin.ai.inboxScope.label') }}</CardTitle>
+            </div>
+            <CardDescription>
+              <template v-if="isInboxScope">
+                <span v-if="hasInboxOverride">{{ t('admin.ai.inboxScope.helpInboxOverride') }}</span>
+                <span v-else>{{ t('admin.ai.inboxScope.helpInboxFallback') }}</span>
+              </template>
+              <template v-else>
+                {{ t('admin.ai.inboxScope.helpGlobal') }}
+              </template>
+            </CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-4">
+            <div class="flex items-center gap-2 max-w-md">
+              <Select v-model="selectedInboxId">
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="global">{{ t('admin.ai.inboxScope.global') }}</SelectItem>
+                  <SelectItem
+                    v-for="inbox in inboxes"
+                    :key="inbox.id"
+                    :value="String(inbox.id)"
+                  >
+                    {{ inbox.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                v-if="isInboxScope && hasInboxOverride"
+                variant="outline"
+                @click="resetToGlobal"
+              >
+                {{ t('admin.ai.inboxScope.resetToGlobal') }}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <!-- T3c: RAG system prompt + tuning -->
         <Card>
           <CardHeader>
@@ -221,8 +275,38 @@
               </div>
             </div>
 
+            <!-- T3h: per-inbox knowledge source filter. Only visible
+                 when an inbox is selected; drives the RAG search
+                 source_id = ANY filter on the backend. Empty selection
+                 means "search all sources" (matches global behaviour). -->
+            <div v-if="isInboxScope" class="border-t pt-4 mt-2 space-y-2">
+              <Label>{{ t('admin.ai.inboxScope.knowledgeSources') }}</Label>
+              <p class="text-xs text-muted-foreground">
+                {{ t('admin.ai.inboxScope.knowledgeSourcesHelp') }}
+              </p>
+              <div class="space-y-2">
+                <label
+                  v-for="source in knowledgeSources"
+                  :key="source.id"
+                  class="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    :value="String(source.id)"
+                    v-model="selectedKnowledgeSourceIds"
+                    class="rounded border-gray-300"
+                  />
+                  <span class="text-sm">{{ source.name }}</span>
+                  <Badge variant="secondary" class="text-xs">{{ source.source_type }}</Badge>
+                </label>
+                <p v-if="knowledgeSources.length === 0" class="text-sm text-muted-foreground italic">
+                  {{ t('admin.ai.inboxScope.knowledgeSourcesEmpty') }}
+                </p>
+              </div>
+            </div>
+
             <Button @click="saveRAGSettings" :isLoading="savingRAG">
-              {{ t('globals.messages.save') }}
+              {{ isInboxScope ? t('admin.ai.inboxScope.saveInbox') : t('admin.ai.inboxScope.saveGlobal') }}
             </Button>
           </CardContent>
         </Card>
@@ -306,7 +390,7 @@
             </div>
 
             <Button @click="saveExternalSearchSettings" :isLoading="savingExternalSearch">
-              {{ t('globals.messages.save') }}
+              {{ isInboxScope ? t('admin.ai.inboxScope.saveInbox') : t('admin.ai.inboxScope.saveGlobal') }}
             </Button>
           </CardContent>
         </Card>
@@ -370,7 +454,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AdminSplitLayout from '@/layouts/admin/AdminSplitLayout.vue'
 import { Button } from '@shared-ui/components/ui/button'
@@ -395,7 +479,7 @@ import {
   SelectValue
 } from '@shared-ui/components/ui/select'
 import { handleHTTPError } from '@shared-ui/utils/http.js'
-import { Bot, CheckCircle, AlertCircle, RefreshCw } from 'lucide-vue-next'
+import { Bot, CheckCircle, AlertCircle, RefreshCw, Inbox } from 'lucide-vue-next'
 import { useEmitter } from '@/composables/useEmitter'
 import { EMITTER_EVENTS } from '@/constants/emitterEvents'
 import api from '@/api'
@@ -448,6 +532,22 @@ const externalSearchURL = ref('')
 const externalSearchMaxResults = ref(3)
 const externalSearchEndpoints = ref('')
 const externalSearchHeaders = ref('')
+
+// T3h inbox-scope state. selectedInboxId === 'global' edits the
+// ai.* settings rows (existing behaviour); otherwise edits the
+// inbox_ai_settings row for that inbox. hasInboxOverride distinguishes
+// "loaded a real saved row" (id > 0) from "loaded global defaults as a
+// starting point" so the description copy + Reset button render
+// correctly. globalSnapshot caches the global form values when an
+// inbox is selected, so we can restore them when the user flips back
+// to "global" without re-fetching.
+const inboxes = ref([])
+const selectedInboxId = ref('global')
+const knowledgeSources = ref([])
+const selectedKnowledgeSourceIds = ref([])
+const hasInboxOverride = ref(false)
+const isInboxScope = computed(() => selectedInboxId.value !== 'global')
+let globalSnapshot = null
 
 const showToast = (description, variant) =>
   emitter.emit(EMITTER_EVENTS.SHOW_TOAST, variant ? { variant, description } : { description })
@@ -604,9 +704,31 @@ const onSubmitTranscription = async () => {
   }
 }
 
-// saveRAGSettings persists only the three RAG fields. The backend's
-// merge logic preserves transcription settings, so this card and the
-// transcription form below it are independently saveable.
+// buildInboxPayload assembles the InboxAISettings JSON the backend
+// upsert expects. Centralised because both saveRAGSettings and
+// saveExternalSearchSettings round-trip the full struct (the backend
+// row carries all fields together, unlike the global ai.* split where
+// each card owns its own keys).
+function buildInboxPayload() {
+  return {
+    system_prompt: systemPrompt.value || '',
+    max_context_chunks: parseInt(maxContextChunks.value, 10) || 5,
+    similarity_threshold: parseFloat(similarityThreshold.value) || 0.25,
+    external_search_enabled: !!externalSearchEnabled.value,
+    external_search_url: externalSearchURL.value || '',
+    external_search_max_results: parseInt(externalSearchMaxResults.value, 10) || 3,
+    external_search_endpoints: externalSearchEndpoints.value || '',
+    external_search_headers: externalSearchHeaders.value || '',
+    knowledge_source_ids: (selectedKnowledgeSourceIds.value || []).map(Number)
+  }
+}
+
+// saveRAGSettings persists the RAG fields. Dispatches by scope:
+// - global (default): writes ai.system_prompt / ai.max_context_chunks /
+//   ai.similarity_threshold via the existing partial-merge endpoint.
+// - per-inbox (T3h): full upsert against inbox_ai_settings; the row
+//   carries all override fields so the External Search card writes
+//   the same shape and they coexist on a single row.
 async function saveRAGSettings() {
   const chunks = parseInt(maxContextChunks.value, 10)
   const threshold = parseFloat(similarityThreshold.value)
@@ -620,11 +742,16 @@ async function saveRAGSettings() {
   }
   savingRAG.value = true
   try {
-    await api.updateSettings('ai', {
-      'ai.system_prompt': systemPrompt.value || '',
-      'ai.max_context_chunks': chunks,
-      'ai.similarity_threshold': threshold
-    })
+    if (isInboxScope.value) {
+      await api.updateInboxAISettings(selectedInboxId.value, buildInboxPayload())
+      hasInboxOverride.value = true
+    } else {
+      await api.updateSettings('ai', {
+        'ai.system_prompt': systemPrompt.value || '',
+        'ai.max_context_chunks': chunks,
+        'ai.similarity_threshold': threshold
+      })
+    }
     showToast(t('globals.messages.savedSuccessfully'))
   } catch (err) {
     showToast(handleHTTPError(err).message, 'destructive')
@@ -674,13 +801,18 @@ async function saveExternalSearchSettings() {
 
   savingExternalSearch.value = true
   try {
-    await api.updateSettings('ai', {
-      'ai.external_search_enabled': !!externalSearchEnabled.value,
-      'ai.external_search_url': externalSearchURL.value || '',
-      'ai.external_search_max_results': maxResults,
-      'ai.external_search_endpoints': endpointsRaw,
-      'ai.external_search_headers': headersRaw
-    })
+    if (isInboxScope.value) {
+      await api.updateInboxAISettings(selectedInboxId.value, buildInboxPayload())
+      hasInboxOverride.value = true
+    } else {
+      await api.updateSettings('ai', {
+        'ai.external_search_enabled': !!externalSearchEnabled.value,
+        'ai.external_search_url': externalSearchURL.value || '',
+        'ai.external_search_max_results': maxResults,
+        'ai.external_search_endpoints': endpointsRaw,
+        'ai.external_search_headers': headersRaw
+      })
+    }
     showToast(t('globals.messages.savedSuccessfully'))
   } catch (err) {
     showToast(handleHTTPError(err).message, 'destructive')
@@ -689,8 +821,136 @@ async function saveExternalSearchSettings() {
   }
 }
 
+// T3h: helpers for inbox scope. fetchInboxes loads the dropdown
+// options; fetchKnowledgeSources loads the per-inbox knowledge-source
+// picker. Both are cheap and run once on mount.
+async function fetchInboxes() {
+  try {
+    const res = await api.getInboxes()
+    inboxes.value = res.data?.data || []
+  } catch (err) {
+    // Non-fatal — admins can still edit the global config without
+    // the dropdown populating; the per-inbox surface just isn't
+    // accessible until the call succeeds.
+  }
+}
+
+async function fetchKnowledgeSources() {
+  try {
+    const res = await api.getRAGSources()
+    knowledgeSources.value = res.data?.data || []
+  } catch (err) {
+    // Non-fatal — the picker just renders an empty state.
+  }
+}
+
+// snapshotGlobalForm caches the global form values before flipping
+// into per-inbox edit mode so we can restore them on switch-back
+// without re-fetching the global ai.* envelope.
+function snapshotGlobalForm() {
+  globalSnapshot = {
+    systemPrompt: systemPrompt.value,
+    maxContextChunks: maxContextChunks.value,
+    similarityThreshold: similarityThreshold.value,
+    externalSearchEnabled: externalSearchEnabled.value,
+    externalSearchURL: externalSearchURL.value,
+    externalSearchMaxResults: externalSearchMaxResults.value,
+    externalSearchEndpoints: externalSearchEndpoints.value,
+    externalSearchHeaders: externalSearchHeaders.value
+  }
+}
+
+function restoreGlobalForm() {
+  if (!globalSnapshot) return
+  systemPrompt.value = globalSnapshot.systemPrompt
+  maxContextChunks.value = globalSnapshot.maxContextChunks
+  similarityThreshold.value = globalSnapshot.similarityThreshold
+  externalSearchEnabled.value = globalSnapshot.externalSearchEnabled
+  externalSearchURL.value = globalSnapshot.externalSearchURL
+  externalSearchMaxResults.value = globalSnapshot.externalSearchMaxResults
+  externalSearchEndpoints.value = globalSnapshot.externalSearchEndpoints
+  externalSearchHeaders.value = globalSnapshot.externalSearchHeaders
+  selectedKnowledgeSourceIds.value = []
+}
+
+// applyInboxRow hydrates the form from an inbox_ai_settings row.
+// id > 0 means a real saved override; id === 0 means "no row, render
+// global defaults" — we keep the snapshot in place and just clear the
+// knowledge-source selection.
+function applyInboxRow(row) {
+  if (row && row.id > 0) {
+    hasInboxOverride.value = true
+    systemPrompt.value = row.system_prompt || ''
+    maxContextChunks.value = row.max_context_chunks || 5
+    similarityThreshold.value = row.similarity_threshold || 0.25
+    externalSearchEnabled.value = !!row.external_search_enabled
+    externalSearchURL.value = row.external_search_url || ''
+    externalSearchMaxResults.value = row.external_search_max_results || 3
+    externalSearchEndpoints.value = row.external_search_endpoints || ''
+    externalSearchHeaders.value = row.external_search_headers || ''
+    let ks = row.knowledge_source_ids
+    if (typeof ks === 'string') {
+      try { ks = JSON.parse(ks) } catch { ks = [] }
+    }
+    selectedKnowledgeSourceIds.value = Array.isArray(ks) ? ks.map(String) : []
+  } else {
+    hasInboxOverride.value = false
+    // Pre-fill from the global snapshot so admins see what the inbox
+    // is currently effectively using before they edit.
+    restoreGlobalForm()
+  }
+}
+
+async function fetchInboxAISettings(inboxId) {
+  try {
+    const res = await api.getInboxAISettings(inboxId)
+    applyInboxRow(res.data?.data || {})
+  } catch (err) {
+    showToast(handleHTTPError(err).message, 'destructive')
+    hasInboxOverride.value = false
+    restoreGlobalForm()
+  }
+}
+
+async function resetToGlobal() {
+  if (!isInboxScope.value) return
+  // eslint-disable-next-line no-alert
+  if (!window.confirm(t('admin.ai.inboxScope.resetConfirm'))) return
+  try {
+    await api.deleteInboxAISettings(selectedInboxId.value)
+    hasInboxOverride.value = false
+    restoreGlobalForm()
+    showToast(t('admin.ai.inboxScope.resetSuccess'))
+  } catch (err) {
+    showToast(handleHTTPError(err).message, 'destructive')
+  }
+}
+
+// React to scope flips. Going global -> inbox: snapshot the global
+// form, then load the inbox row (which falls back to the snapshot if
+// the inbox has no override). Going inbox -> global: restore the
+// snapshot.
+watch(selectedInboxId, async (newVal, oldVal) => {
+  if (oldVal === 'global' && newVal !== 'global') {
+    snapshotGlobalForm()
+    await fetchInboxAISettings(newVal)
+  } else if (oldVal !== 'global' && newVal === 'global') {
+    hasInboxOverride.value = false
+    restoreGlobalForm()
+  } else if (newVal !== 'global') {
+    // Inbox-to-inbox switch: snapshot still valid, just reload row.
+    await fetchInboxAISettings(newVal)
+  }
+})
+
 onMounted(async () => {
-  await Promise.all([fetchProviders(), fetchModels(), loadAISettings()])
+  await Promise.all([
+    fetchProviders(),
+    fetchModels(),
+    loadAISettings(),
+    fetchInboxes(),
+    fetchKnowledgeSources()
+  ])
   isLoading.value = false
 })
 </script>

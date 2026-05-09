@@ -669,6 +669,25 @@ CREATE INDEX index_rag_documents_on_source_id ON rag_documents(source_id);
 CREATE INDEX index_rag_documents_on_content_hash ON rag_documents(content_hash);
 CREATE UNIQUE INDEX index_unique_rag_documents_on_source_id_source_ref ON rag_documents(source_id, source_ref) WHERE source_ref IS NOT NULL;
 
+DROP TABLE IF EXISTS inbox_ai_settings CASCADE;
+CREATE TABLE inbox_ai_settings (
+	id SERIAL PRIMARY KEY,
+	created_at TIMESTAMPTZ DEFAULT NOW(),
+	updated_at TIMESTAMPTZ DEFAULT NOW(),
+	inbox_id INT NOT NULL REFERENCES inboxes(id) ON DELETE CASCADE,
+	system_prompt TEXT NOT NULL DEFAULT '',
+	max_context_chunks INT NOT NULL DEFAULT 5,
+	similarity_threshold DOUBLE PRECISION NOT NULL DEFAULT 0.25,
+	external_search_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+	external_search_url TEXT NOT NULL DEFAULT '',
+	external_search_max_results INT NOT NULL DEFAULT 3,
+	external_search_endpoints TEXT NOT NULL DEFAULT '',
+	external_search_headers TEXT NOT NULL DEFAULT '',
+	knowledge_source_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+	CONSTRAINT unique_inbox_ai_settings UNIQUE (inbox_id)
+);
+CREATE INDEX idx_inbox_ai_settings_inbox_id ON inbox_ai_settings(inbox_id);
+
 DROP TABLE IF EXISTS custom_attribute_definitions CASCADE;
 CREATE TABLE custom_attribute_definitions (
 	id SERIAL PRIMARY KEY,

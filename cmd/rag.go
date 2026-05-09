@@ -238,8 +238,11 @@ Provide a helpful, accurate response based on the context above. If the context 
 // conversation, the frontend is free to either) and produces an AI-
 // drafted reply by:
 //
-//  1. Reading admin-tuned threshold/max-chunks from settings.
-//  2. Embedding the question + cosine-search rag_documents.
+//  1. Resolving the effective AI settings — per-inbox if an override
+//     exists for the conversation's inbox, otherwise the global config
+//     (T3h).
+//  2. Embedding the question + cosine-search rag_documents (optionally
+//     scoped to a per-inbox subset of knowledge sources).
 //  3. Splitting hits into "context" docs and "macro" docs (macros are
 //     formatted differently in the prompt — they're tone references,
 //     not factual sources).
@@ -255,6 +258,12 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 	var req struct {
 		ConversationID  int    `json:"conversation_id"`
 		CustomerMessage string `json:"customer_message"`
+		// T3h: explicit inbox_id override. When omitted (and a
+		// ConversationID is supplied), the handler resolves it via
+		// conversation.GetConversationInboxID. The admin Test
+		// Knowledge Base path passes neither and resolves to the
+		// global settings.
+		InboxID int `json:"inbox_id"`
 	}
 	if err := r.Decode(&req, "json"); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
@@ -278,10 +287,23 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 		app.lo.Info("RAG generate: truncated customer message", "original_len", original, "truncated_to", len(req.CustomerMessage))
 	}
 
-	aiSettings, err := app.setting.GetAISettings()
+	// T3h: resolve inbox_id — explicit body value wins, otherwise look
+	// up via conversation. Lookup failure is logged + ignored so the
+	// global-fallback path still works.
+	inboxID := req.InboxID
+	if inboxID == 0 && req.ConversationID > 0 {
+		if convInboxID, err := app.conversation.GetConversationInboxID(req.ConversationID); err == nil {
+			inboxID = convInboxID
+		} else {
+			app.lo.Warn("RAG generate: failed to resolve inbox from conversation, using global", "conversation_id", req.ConversationID, "error", err)
+		}
+	}
+
+	aiSettings, err := app.setting.GetEffectiveAISettings(inboxID)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
+	app.lo.Info("RAG generate using AI settings", "inbox_id", inboxID, "has_inbox_override", aiSettings.ID > 0)
 
 	// Defaults match the v1.0.3 production-tuned values. Threshold
 	// is clamped to (0, 0.5] — settings outside that range usually
@@ -295,12 +317,22 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 		maxChunks = 5
 	}
 
-	results, err := app.rag.Search(req.CustomerMessage, maxChunks, threshold)
+	// T3h: parse per-inbox knowledge source ID filter. Empty array (or
+	// parse failure) falls back to "search all sources" behaviour.
+	var sourceIDs []int
+	if len(aiSettings.KnowledgeSourceIDs) > 0 && string(aiSettings.KnowledgeSourceIDs) != "[]" {
+		if err := json.Unmarshal(aiSettings.KnowledgeSourceIDs, &sourceIDs); err != nil {
+			app.lo.Warn("failed to parse knowledge source IDs, falling back to all sources", "error", err)
+			sourceIDs = nil
+		}
+	}
+
+	results, err := app.rag.Search(req.CustomerMessage, maxChunks, threshold, sourceIDs...)
 	if err != nil {
 		app.lo.Warn("RAG search failed, continuing without context", "error", err)
 		results = []models.SearchResult{}
 	}
-	app.lo.Info("RAG generate response", "results_count", len(results), "threshold", threshold)
+	app.lo.Info("RAG generate response", "results_count", len(results), "threshold", threshold, "source_ids", sourceIDs)
 
 	// T3e: pull image attachments from the conversation, resize, and
 	// shape into ImageContent slots for the multimodal payload.
@@ -530,7 +562,13 @@ func (app *App) queryExternalSearch(searchURL, query string, limit int, headers 
 // in arbitrary key/value pairs (intent → path; header name → header
 // value); a typed struct would force a schema migration on every new
 // supported intent type.
-func (app *App) performExternalSearch(aiSettings settingmodels.AISettings, intents []SearchIntent, maxResults int) string {
+//
+// T3h: takes InboxAISettings rather than the global AISettings — the
+// per-inbox override path passes its own external-search config when
+// configured, the global-fallback path passes the projected global
+// values via setting.GetEffectiveAISettings. Either way the three fields
+// read here (URL / Endpoints / Headers) have identical semantics.
+func (app *App) performExternalSearch(aiSettings settingmodels.InboxAISettings, intents []SearchIntent, maxResults int) string {
 	endpoints := make(map[string]string)
 	if aiSettings.ExternalSearchEndpoints != "" {
 		if err := json.Unmarshal([]byte(aiSettings.ExternalSearchEndpoints), &endpoints); err != nil {

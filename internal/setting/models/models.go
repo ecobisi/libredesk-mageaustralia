@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 type General struct {
 	SiteName                    string   `json:"app.site_name"`
 	Lang                        string   `json:"app.lang"`
@@ -118,4 +120,46 @@ type AISettings struct {
 	ExternalSearchMaxResults int     `json:"ai.external_search_max_results" db:"ai.external_search_max_results"`
 	ExternalSearchEndpoints  string  `json:"ai.external_search_endpoints" db:"ai.external_search_endpoints"`
 	ExternalSearchHeaders    string  `json:"ai.external_search_headers" db:"ai.external_search_headers"`
+}
+
+// InboxAISettings holds per-inbox AI/RAG configuration (T3h). Mirrors the
+// runtime-relevant subset of AISettings — system prompt, RAG tuning,
+// external-search config — plus a JSON array of knowledge_source_ids that
+// scopes RAG search to a subset of sources for this inbox. When a row
+// exists for an inbox it overrides the global AISettings for that inbox's
+// conversations; when absent, the RAG pipeline falls back to the global
+// settings.
+//
+// Field-by-field semantics match AISettings; defaults applied at runtime
+// (cmd/rag.go) follow the same fallbacks (threshold 0.25, max chunks 5)
+// so an admin-saved zero value behaves identically whether scoped to an
+// inbox or to the global config.
+//
+// KnowledgeSourceIDs is a JSON array of rag_sources.id values. Empty
+// array (or null) means "search all sources" (matches global behaviour);
+// a non-empty array filters the pgvector search via `source_id = ANY`.
+// Stored as jsonb so the column can hold an array natively without a
+// join table — admins typically pick 1-3 sources per inbox and the set
+// is read once per generate-response call.
+//
+// Transcription fields are deliberately NOT included: voicemail
+// transcription is invoked at message ingest before any inbox-scoped
+// reasoning happens (it runs unconditionally per the global toggle), and
+// the embedding model is chosen at the AI manager layer not the RAG
+// handler. Per-inbox prompts/sources are the only knobs that benefit
+// from inbox-level overrides today.
+type InboxAISettings struct {
+	ID                       int             `db:"id" json:"id"`
+	CreatedAt                string          `db:"created_at" json:"created_at"`
+	UpdatedAt                string          `db:"updated_at" json:"updated_at"`
+	InboxID                  int             `db:"inbox_id" json:"inbox_id"`
+	SystemPrompt             string          `db:"system_prompt" json:"system_prompt"`
+	MaxContextChunks         int             `db:"max_context_chunks" json:"max_context_chunks"`
+	SimilarityThreshold      float64         `db:"similarity_threshold" json:"similarity_threshold"`
+	ExternalSearchEnabled    bool            `db:"external_search_enabled" json:"external_search_enabled"`
+	ExternalSearchURL        string          `db:"external_search_url" json:"external_search_url"`
+	ExternalSearchMaxResults int             `db:"external_search_max_results" json:"external_search_max_results"`
+	ExternalSearchEndpoints  string          `db:"external_search_endpoints" json:"external_search_endpoints"`
+	ExternalSearchHeaders    string          `db:"external_search_headers" json:"external_search_headers"`
+	KnowledgeSourceIDs       json.RawMessage `db:"knowledge_source_ids" json:"knowledge_source_ids"`
 }

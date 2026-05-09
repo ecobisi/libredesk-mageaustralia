@@ -286,6 +286,7 @@ func New(
 type queries struct {
 	// Conversation queries.
 	GetConversationUUID                *sqlx.Stmt `query:"get-conversation-uuid"`
+	GetConversationInboxID             *sqlx.Stmt `query:"get-conversation-inbox-id"`
 	GetConversation                    *sqlx.Stmt `query:"get-conversation"`
 	GetConversationsCreatedAfter       *sqlx.Stmt `query:"get-conversations-created-after"`
 	GetUnassignedConversations         *sqlx.Stmt `query:"get-unassigned-conversations"`
@@ -587,6 +588,21 @@ func (c *Manager) GetConversationUUID(id int) (string, error) {
 		return uuid, err
 	}
 	return uuid, nil
+}
+
+// GetConversationInboxID retrieves the inbox_id of a conversation by its
+// numeric ID (T3h). Used by the RAG generate handler to resolve
+// per-inbox AI settings when the caller did not pass inbox_id explicitly.
+func (c *Manager) GetConversationInboxID(id int) (int, error) {
+	var inboxID int
+	if err := c.q.GetConversationInboxID.QueryRow(id).Scan(&inboxID); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, err
+		}
+		c.lo.Error("fetching conversation inbox_id from DB", "error", err)
+		return 0, err
+	}
+	return inboxID, nil
 }
 
 // GetAllConversationsList retrieves all conversations with optional filtering, ordering, and pagination.

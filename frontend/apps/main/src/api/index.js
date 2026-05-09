@@ -526,6 +526,15 @@ const testAIProvider = (data) => http.post('/api/v1/ai/provider/test', data, {
   }
 })
 
+// T3h Per-inbox AI settings overrides.
+const getInboxAISettings = (inboxId) => http.get(`/api/v1/settings/ai/inbox/${inboxId}`)
+const updateInboxAISettings = (inboxId, data) =>
+  http.put(`/api/v1/settings/ai/inbox/${inboxId}`, data, {
+    headers: { 'Content-Type': 'application/json' }
+  })
+const deleteInboxAISettings = (inboxId) =>
+  http.delete(`/api/v1/settings/ai/inbox/${inboxId}`)
+
 // T3a RAG knowledge sources + generate-response endpoint.
 const getRAGSources = () => http.get('/api/v1/rag/sources')
 const getRAGSource = (id) => http.get(`/api/v1/rag/sources/${id}`)
@@ -709,6 +718,9 @@ export default {
   getAvailableAIModels,
   setDefaultAIProvider,
   testAIProvider,
+  getInboxAISettings,
+  updateInboxAISettings,
+  deleteInboxAISettings,
   getRAGSources,
   getRAGSource,
   createRAGSource,
