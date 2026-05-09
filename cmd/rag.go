@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -264,6 +265,16 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 		// Knowledge Base path passes neither and resolves to the
 		// global settings.
 		InboxID int `json:"inbox_id"`
+		// T3r: opt-in flag set by the "+ Orders" button. When true
+		// AND the conversation has an ID AND ecommerce is configured,
+		// the handler fans out to app.ecommerce.GatherFullContext to
+		// produce the customer / recent orders / mentioned-orders
+		// markdown block injected into the prompt. Default false so
+		// the standard "Generate Response" path makes zero ecommerce
+		// API calls — matters because Magento/Maho lookups can be
+		// slow and the agent shouldn't pay that latency unless they
+		// asked for it.
+		IncludeEcommerce bool `json:"include_ecommerce"`
 	}
 	if err := r.Decode(&req, "json"); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
@@ -358,6 +369,20 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 		}
 	}
 
+	// T3r: optional ecommerce context (customer + recent orders +
+	// orders mentioned in the conversation). Gated on the explicit
+	// IncludeEcommerce flag — the standard "Generate Response" button
+	// stays free of Magento/Maho lookups. ConversationID 0 (admin
+	// "Test Knowledge Base") and an unconfigured manager both short-
+	// circuit to "" + nil. ecommerceWarnings is surfaced verbatim in
+	// the envelope so the agent UI can toast auth failures instead
+	// of silently degrading the prompt.
+	var ecommerceContext string
+	var ecommerceWarnings []string
+	if req.IncludeEcommerce && req.ConversationID > 0 && app.ecommerce != nil && app.ecommerce.IsConfigured() {
+		ecommerceContext, ecommerceWarnings = app.gatherEcommerceContext(r.RequestCtx, req.ConversationID)
+	}
+
 	// T3d: optionally augment the prompt with results from an external
 	// HTTP search API. Two-step pipeline: classify the customer message
 	// into search intents (product / category / faq / …), then fan out
@@ -429,6 +454,15 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 		systemPrompt += "\n\nNote: The customer has attached images to this conversation. Please examine them and reference relevant details in your response."
 	}
 
+	// T3r: append the ecommerce markdown block to the assembled prompt
+	// so the LLM has order/customer details to draw from. Done after all
+	// {{...}} substitutions to keep the block out of the admin-editable
+	// template surface — the block format is fixed by FormatContextForPrompt
+	// and isn't meant to be sliced by template authors.
+	if ecommerceContext != "" {
+		systemPrompt += "\n\n" + ecommerceContext
+	}
+
 	response, err := app.ai.CompletionWithPayload(ai.PromptPayload{
 		SystemPrompt: systemPrompt,
 		UserPrompt:   req.CustomerMessage,
@@ -437,10 +471,100 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
-	return r.SendEnvelope(map[string]interface{}{
+	// T3r: ecommerce_warnings is omitted when nil/empty so the response
+	// shape stays minimal for the common no-ecommerce path. ReplyBox.vue
+	// only iterates if the field is a non-empty array, so either shape
+	// works on the wire — explicit nil keeps the success envelope tidy.
+	resp := map[string]interface{}{
 		"response": response,
 		"sources":  results,
-	})
+	}
+	if len(ecommerceWarnings) > 0 {
+		resp["ecommerce_warnings"] = ecommerceWarnings
+	}
+	return r.SendEnvelope(resp)
+}
+
+// gatherEcommerceContext fetches the conversation's contact email +
+// last 50 messages, hands them to app.ecommerce.GatherFullContext (T3o
+// multi-stage: customer-by-email + recent-orders-by-email + scan
+// messages for order numbers + per-order Stage 3 lookups), and returns
+// the FormatContextForPrompt markdown block plus the warnings slice.
+//
+// All failures along the way log + return ("" , nil) so the RAG flow
+// degrades to "no ecommerce context" rather than failing the whole
+// generate call. Warnings (cascading auth failures, network errors)
+// are surfaced verbatim to the caller so the UI can toast them — the
+// agent needs to know "your AI reply was generated without order data
+// because Maho 401'd" rather than silently getting a generic answer.
+//
+// Mirrors v1.0.3 bb7895b9 + T3ae(d). Uses the v2 conversation manager
+// signatures: GetConversationUUID(id), GetConversation(id, uuid, ""),
+// GetConversationMessages(uuid, page, pageSize, private, msgTypes).
+func (app *App) gatherEcommerceContext(ctx context.Context, conversationID int) (string, []string) {
+	uuid, err := app.conversation.GetConversationUUID(conversationID)
+	if err != nil {
+		app.lo.Warn("ecommerce: failed to get conversation UUID", "conversation_id", conversationID, "error", err)
+		return "", nil
+	}
+
+	conv, err := app.conversation.GetConversation(conversationID, uuid, "")
+	if err != nil {
+		app.lo.Warn("ecommerce: failed to get conversation", "conversation_id", conversationID, "error", err)
+		return "", nil
+	}
+
+	customerEmail := ""
+	if conv.Contact.Email.Valid {
+		customerEmail = conv.Contact.Email.String
+	}
+	if customerEmail == "" {
+		app.lo.Debug("ecommerce: no contact email on conversation", "conversation_id", conversationID)
+		return "", nil
+	}
+
+	// Page 1, pageSize 50 — wide enough to catch order numbers buried
+	// deep in long support threads, narrow enough to keep the manager's
+	// regex scan fast. Failure is non-fatal: GatherFullContext still
+	// has the email-based lookups to work with.
+	messages, _, err := app.conversation.GetConversationMessages(uuid, 1, 50, nil, nil)
+	if err != nil {
+		app.lo.Warn("ecommerce: failed to fetch messages for order-number scan, continuing without", "conversation_id", conversationID, "error", err)
+	}
+
+	messageTexts := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Content == "" {
+			continue
+		}
+		// HTML stripped because the order-number regex shouldn't match
+		// anything inside attribute values or tag names. Reuses the
+		// stripHTMLForExternalSearch helper already used by the T3d
+		// external-search path — same regex strip is fine here.
+		text := stripHTMLForExternalSearch(msg.Content)
+		if text != "" {
+			messageTexts = append(messageTexts, text)
+		}
+	}
+
+	app.lo.Info("ecommerce: gathering context", "conversation_id", conversationID, "email", customerEmail, "messages_scanned", len(messageTexts))
+
+	// maxOrders=5 matches v1.0.3 — 5 most-recent orders are enough to
+	// give the LLM a sense of the customer's history without bloating
+	// the prompt; per-order Stage 3 lookups bolt on full details for
+	// orders specifically referenced in the conversation.
+	eCtx, err := app.ecommerce.GatherFullContext(ctx, customerEmail, messageTexts, 5)
+	if err != nil {
+		app.lo.Warn("ecommerce: GatherFullContext failed", "email", customerEmail, "error", err)
+		return "", nil
+	}
+
+	formatted := app.ecommerce.FormatContextForPrompt(eCtx)
+	if formatted != "" {
+		app.lo.Info("ecommerce: context added to prompt", "email", customerEmail, "context_length", len(formatted), "warnings", len(eCtx.Warnings))
+	}
+
+	return formatted, eCtx.Warnings
 }
 
 // classifySearchIntent asks the LLM to bucket the customer's message

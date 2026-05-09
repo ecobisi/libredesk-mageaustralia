@@ -123,6 +123,30 @@
         <Sparkles class="h-3.5 w-3.5 mr-1.5" :class="{ 'animate-pulse': isGenerating }" />
         {{ isGenerating ? $t('replyBox.generating') : $t('replyBox.generateResponse') }}
       </Button>
+      <!--
+        T3r "+ Orders" button. Only surfaces alongside the Generate
+        Response button (same showGenerateButton gate — knowledge-base
+        replies on private notes still don't make sense, and ecommerce
+        context for them makes even less sense) and only when
+        showOrdersButton is true (parent has confirmed via
+        getEcommerceStatus that a provider is configured). Distinct
+        click handler so the parent can flip the include_ecommerce
+        flag for this code path only — the bare Generate Response
+        button stays free of Magento/Maho lookups so the no-ecommerce
+        flow doesn't pay the latency.
+      -->
+      <Button
+        v-if="showGenerateButton && showOrdersButton"
+        variant="outline"
+        size="sm"
+        class="h-8 px-3 text-xs"
+        :disabled="isGenerating"
+        :title="$t('replyBox.generateWithOrders')"
+        @click="emit('generateWithOrders')"
+      >
+        <ShoppingCart class="h-3.5 w-3.5 mr-1.5" :class="{ 'animate-pulse': isGenerating }" />
+        {{ isGenerating ? $t('replyBox.generating') : $t('replyBox.plusOrders') }}
+      </Button>
     </div>
     <div class="flex items-center" v-if="showSendButton">
       <!-- Delete-draft button. Only surfaces when there's something to discard
@@ -207,7 +231,8 @@ import {
   Image as ImageIcon,
   Trash2,
   Zap,
-  Sparkles
+  Sparkles,
+  ShoppingCart
 } from 'lucide-vue-next'
 import { useEmitter } from '@main/composables/useEmitter'
 import { EMITTER_EVENTS } from '@main/constants/emitterEvents.js'
@@ -230,7 +255,7 @@ const isEmojiPickerVisible = ref(false)
 // chrome they have to ignore.
 const isToolbarVisible = ref(false)
 const emojiPickerRef = ref(null)
-const emit = defineEmits(['emojiSelect', 'sendWithStatus', 'deleteDraft', 'editorCommand', 'generateResponse'])
+const emit = defineEmits(['emojiSelect', 'sendWithStatus', 'deleteDraft', 'editorCommand', 'generateResponse', 'generateWithOrders'])
 
 // Using defineProps for props that don't need two-way binding
 const props = defineProps({
@@ -285,6 +310,13 @@ const props = defineProps({
   showGenerateButton: {
     type: Boolean,
     default: true
+  },
+  // T3r: gates the "+ Orders" button. Parent (ReplyBox) sets this
+  // true only when getEcommerceStatus reports a configured provider,
+  // so we never render an affordance that would 400 on click.
+  showOrdersButton: {
+    type: Boolean,
+    default: false
   }
 })
 

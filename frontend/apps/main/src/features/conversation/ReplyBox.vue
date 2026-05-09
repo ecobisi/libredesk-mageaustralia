@@ -146,6 +146,7 @@
           :hasDraft="hasDraftContent"
           :sendStatuses="availableSendStatuses"
           :fromOptions="fromOptions"
+          :ecommerceConfigured="ecommerceConfigured"
           v-model:htmlContent="htmlContent"
           v-model:textContent="textContent"
           v-model:to="to"
@@ -164,6 +165,8 @@
           @fileDelete="handleFileDelete"
           @filesDropped="uploadFiles"
           @aiPromptSelected="handleAiPromptSelected"
+          @generateResponse="handleGenerateResponse"
+          @generateWithOrders="handleGenerateWithOrders"
           class="h-full flex-grow"
         />
       </DialogContent>
@@ -180,12 +183,14 @@
         :isFullscreen="false"
         :aiPrompts="aiPrompts"
         :isSending="isSending"
+        :isGenerating="isGenerating"
         :isDraftLoading="isDraftLoading"
         :uploadingFiles="uploadingFiles"
         :uploadedFiles="mediaFiles"
         :hasDraft="hasDraftContent"
         :sendStatuses="availableSendStatuses"
         :fromOptions="fromOptions"
+        :ecommerceConfigured="ecommerceConfigured"
         v-model:htmlContent="htmlContent"
         v-model:textContent="textContent"
         v-model:to="to"
@@ -205,6 +210,7 @@
         @filesDropped="uploadFiles"
         @aiPromptSelected="handleAiPromptSelected"
         @generateResponse="handleGenerateResponse"
+        @generateWithOrders="handleGenerateWithOrders"
       />
     </div>
   </div>
@@ -308,6 +314,11 @@ const isSending = ref(false)
 // T3a: drives the "Generating..." state on the Generate Response
 // button while the RAG endpoint is in flight.
 const isGenerating = ref(false)
+// T3r: probed once on mount via getEcommerceStatus. Drives the
+// "+ Orders" button visibility — the affordance only renders when
+// an ecommerce provider is actually configured (otherwise clicking
+// it would just produce a no-op response with no order context).
+const ecommerceConfigured = ref(false)
 const messageType = useStorage('replyBoxMessageType', 'reply')
 const to = ref('')
 const cc = ref('')
@@ -365,6 +376,25 @@ const fetchAiPrompts = async () => {
 }
 
 fetchAiPrompts()
+
+/**
+ * T3r: probes ecommerce configuration once at mount. The endpoint is
+ * `auth`-only (T3q) so any agent can hit it; on success we cache the
+ * `configured` boolean to drive the "+ Orders" button visibility. Any
+ * failure (network, 401, malformed response) silently falls back to
+ * "not configured" — the button stays hidden, the standard Generate
+ * Response path still works.
+ */
+const fetchEcommerceStatus = async () => {
+  try {
+    const resp = await api.getEcommerceStatus()
+    ecommerceConfigured.value = resp.data?.data?.configured || false
+  } catch {
+    ecommerceConfigured.value = false
+  }
+}
+
+fetchEcommerceStatus()
 
 // MP1: per-inbox signature.
 // Resolved server-side (placeholders → agent + customer values) and cached
@@ -444,7 +474,7 @@ const handleAiPromptSelected = async (key) => {
  * the lighter-weight aiCompletion path; the RAG flow needs more
  * setup (knowledge sources) than a single key entry handles.
  */
-const handleGenerateResponse = async () => {
+const handleGenerateResponse = async (includeEcommerce = false) => {
   isGenerating.value = true
   try {
     // Limit to bound prompt size — the backend also caps the
@@ -530,7 +560,11 @@ const handleGenerateResponse = async () => {
 
     const resp = await api.ragGenerate({
       conversation_id: conversationStore.current?.id,
-      customer_message: conversationText + internalNotes
+      customer_message: conversationText + internalNotes,
+      // T3r: opt-in ecommerce context. Only set true on the dedicated
+      // "+ Orders" path so the standard Generate flow stays free of
+      // Magento/Maho lookups.
+      include_ecommerce: includeEcommerce
     })
 
     const response = resp.data?.data?.response
@@ -549,7 +583,22 @@ const handleGenerateResponse = async () => {
       generatedHtml = generatedHtml.replace(/<script[\s\S]*?<\/script>/gi, '')
       generatedHtml = generatedHtml.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '')
       htmlContent.value = generatedHtml
-      toast.success(t('replyBox.generateSuccess'))
+      toast.success(includeEcommerce
+        ? t('replyBox.generateSuccessWithOrders')
+        : t('replyBox.generateSuccess'))
+
+      // T3r/T3ae(d): surface ecommerce manager warnings (auth failures,
+      // network errors) verbatim. The agent needs to know "your AI
+      // reply was generated without order data because Maho 401'd"
+      // rather than silently getting a generic answer. One destructive
+      // toast per warning so they don't get swallowed by a single
+      // generic banner.
+      const warnings = resp.data?.data?.ecommerce_warnings
+      if (Array.isArray(warnings) && warnings.length > 0) {
+        for (const w of warnings) {
+          toast.error(t('replyBox.ecommerceWarning', { warning: w }))
+        }
+      }
     }
   } catch (error) {
     if (error.response?.status === 400 && userStore.can('ai:manage')) {
@@ -560,6 +609,17 @@ const handleGenerateResponse = async () => {
   } finally {
     isGenerating.value = false
   }
+}
+
+/**
+ * T3r: thin delegate for the "+ Orders" button — flips the
+ * include_ecommerce flag and reuses the same generate flow. Kept as
+ * a separate handler (rather than wiring `() => handleGenerateResponse(true)`
+ * inline) so the v-on listener stays a stable identity and the ReplyBox
+ * component contract reads cleanly.
+ */
+const handleGenerateWithOrders = () => {
+  handleGenerateResponse(true)
 }
 
 /**

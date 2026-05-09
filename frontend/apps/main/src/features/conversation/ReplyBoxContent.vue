@@ -129,11 +129,13 @@
       :isSending="isSending"
       :isGenerating="isGenerating"
       :showGenerateButton="messageType === 'reply'"
+      :showOrdersButton="ecommerceConfigured"
       :enableSend="enableSend"
       :handleSend="handleSend"
       :messageType="messageType"
       @emojiSelect="handleEmojiSelect"
       @generateResponse="handleGenerateResponse"
+      @generateWithOrders="handleGenerateWithOrders"
     />
   </div>
 </template>
@@ -228,6 +230,13 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  // T3r: pass-through gate for the "+ Orders" button visibility.
+  // ReplyBox owns the getEcommerceStatus probe; this component just
+  // forwards the boolean to ReplyBoxMenuBar without any local logic.
+  ecommerceConfigured: {
+    type: Boolean,
+    default: false
+  },
   uploadingFiles: {
     type: Array,
     required: true
@@ -253,6 +262,9 @@ const emit = defineEmits([
   'aiPromptSelected',
   // T3a: bubbles the Generate Response click up to ReplyBox.
   'generateResponse',
+  // T3r: bubbles the "+ Orders" click up to ReplyBox so it can call
+  // ragGenerate with include_ecommerce: true.
+  'generateWithOrders',
   // UX9: TextEditor splits dropped files into images (inserted inline) and
   // non-images (forwarded here). Parent ReplyBox treats them as regular
   // attachment uploads.
@@ -353,6 +365,11 @@ const handleAiPromptSelected = (key) => {
 
 const handleGenerateResponse = () => {
   emit('generateResponse')
+}
+
+// T3r: bubbles the "+ Orders" click up to ReplyBox.
+const handleGenerateWithOrders = () => {
+  emit('generateWithOrders')
 }
 
 // Watch and update macro view based on message type this filters our macros.
