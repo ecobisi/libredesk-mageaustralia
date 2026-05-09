@@ -4,30 +4,43 @@ import "time"
 
 // Order represents a customer order from any ecommerce platform
 type Order struct {
-	ID              string      `json:"id"`
-	IncrementID     string      `json:"increment_id"`     // Display order number
-	CustomerEmail   string      `json:"customer_email"`
-	CustomerName    string      `json:"customer_name"`
-	Status          string      `json:"status"`
-	State           string      `json:"state"`
-	Items           []OrderItem `json:"items"`
-	Subtotal        float64     `json:"subtotal"`
-	GrandTotal      float64     `json:"grand_total"`
-	ShippingAmount  float64     `json:"shipping_amount"`
-	Currency        string      `json:"currency"`
-	ShippingAddress *Address    `json:"shipping_address"`
-	BillingAddress  *Address    `json:"billing_address"`
-	Shipments       []Shipment  `json:"shipments"`
-	CreatedAt       time.Time   `json:"created_at"`
+	ID              string        `json:"id"`
+	IncrementID     string        `json:"increment_id"` // Display order number
+	CustomerEmail   string        `json:"customer_email"`
+	CustomerName    string        `json:"customer_name"`
+	Status          string        `json:"status"`
+	State           string        `json:"state"`
+	Items           []OrderItem   `json:"items"`
+	Subtotal        float64       `json:"subtotal"`
+	GrandTotal      float64       `json:"grand_total"`
+	TotalPaid       float64       `json:"total_paid"`
+	TotalRefunded   float64       `json:"total_refunded"`
+	ShippingAmount  float64       `json:"shipping_amount"`
+	Currency        string        `json:"currency"`
+	PaymentMethod   string        `json:"payment_method"`
+	ShippingMethod  string        `json:"shipping_method"`
+	ShippingAddress *Address      `json:"shipping_address"`
+	BillingAddress  *Address      `json:"billing_address"`
+	Shipments       []Shipment    `json:"shipments"`
+	StatusHistory   []StatusEntry `json:"status_history"`
+	CreatedAt       time.Time     `json:"created_at"`
+}
+
+// StatusEntry represents a status change or note in the order history
+type StatusEntry struct {
+	Note      string `json:"note"`
+	CreatedAt string `json:"created_at"`
 }
 
 // OrderItem represents a line item in an order
 type OrderItem struct {
-	SKU      string  `json:"sku"`
-	Name     string  `json:"name"`
-	Qty      int     `json:"qty"`
-	Price    float64 `json:"price"`
-	RowTotal float64 `json:"row_total"`
+	SKU         string  `json:"sku"`
+	Name        string  `json:"name"`
+	Qty         int     `json:"qty"`
+	QtyShipped  int     `json:"qty_shipped"`
+	QtyRefunded int     `json:"qty_refunded"`
+	Price       float64 `json:"price"`
+	RowTotal    float64 `json:"row_total"`
 }
 
 // Shipment represents a shipment for an order
@@ -67,11 +80,12 @@ type EcommerceContext struct {
 	Customer      *Customer `json:"customer,omitempty"`
 	RecentOrders  []Order   `json:"recent_orders,omitempty"`
 	MatchedOrders []*Order  `json:"matched_orders,omitempty"` // Orders mentioned in conversation
+	Warnings      []string  `json:"warnings,omitempty"`
 }
 
 // ProviderConfig contains the configuration for an ecommerce provider
 type ProviderConfig struct {
-	Type         string            `json:"type"`          // "magento1", "magento2", "shopify"
+	Type         string            `json:"type"` // "magento1", "magento2", "shopify"
 	BaseURL      string            `json:"base_url"`
 	ClientID     string            `json:"client_id"`
 	ClientSecret string            `json:"client_secret"` // Encrypted in database
