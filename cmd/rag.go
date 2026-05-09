@@ -58,14 +58,39 @@ type ExternalSearchHit struct {
 	BrandID         string                 `json:"brand_id"`
 	InStock         int                    `json:"in_stock"`
 	ProductCount    int                    `json:"product_count"`
+	// T3u: shipping attributes pulled from the Meilisearch product index.
+	// BulkyGoods is reserved for future product-level callouts (currently
+	// unused in formatting). DisableFreeShip is the per-product override
+	// that triggers "CUSTOM FREIGHT QUOTE REQUIRED" — checked
+	// case-insensitively against literal "Yes" so admin-curated values
+	// like "yes"/"YES"/"Yes" all match.
+	BulkyGoods      string                 `json:"bulky_goods"`
+	DisableFreeShip string                 `json:"disable_free_shipping"`
 	Price           map[string]interface{} `json:"price"`
 	Categories      map[string]interface{} `json:"categories"`
+	// T3u: per-SKU stock map populated when the product has size/option
+	// variants. Outer key = SKU; inner map carries `qty` (float64 from
+	// JSON) and `in_stock` (float64, 0 = out, >0 = in). Optional — single-
+	// SKU products omit this and the formatter skips the "Stock by
+	// size/option" line.
+	SkuStockData map[string]map[string]interface{} `json:"sku_stock_data"`
 }
 
 type ExternalSearchResponse struct {
 	Hits               []ExternalSearchHit `json:"hits"`
 	Query              string              `json:"query"`
 	EstimatedTotalHits int                 `json:"estimatedTotalHits"`
+}
+
+// MultiSearchResponse wraps Meilisearch's `/multi-search` API response.
+// T3u: enables endpoints to use a single Meilisearch instance to query
+// multiple indexes (or a single index with a filter expression) by
+// configuring the endpoint path as `multi-search:indexUid` or
+// `multi-search:indexUid:filter_expression`. Each entry in `results`
+// has the same shape as a per-index search response — `performExternalSearch`
+// only consumes the first entry since one intent maps to one indexUid.
+type MultiSearchResponse struct {
+	Results []ExternalSearchResponse `json:"results"`
 }
 
 // handleGetRAGSources returns all RAG knowledge sources, ordered by
@@ -408,12 +433,32 @@ func handleRAGGenerateResponse(r *fastglue.Request) error {
 		}
 	}
 
+	// T3u: filter knowledge-base chunks that mention bulky / oversized /
+	// freight / courier shipping policy. These chunks tend to encode
+	// site-wide "we don't ship X" rules that contradict the per-product
+	// shipping tags emitted by performExternalSearch (FREE SHIPPING /
+	// STANDARD SHIPPING / CUSTOM FREIGHT QUOTE REQUIRED). Without this
+	// filter the LLM sometimes overrides the per-product label with the
+	// generic policy from the KB, producing inconsistent shipping advice.
+	// Macros are not filtered — they're tone references, not factual
+	// sources, and admins curate them directly.
+	shippingFilterWords := []string{"bulky", "oversized", "freight", "courier"}
 	var contextParts, macroParts []string
 	for _, res := range results {
 		if strings.HasPrefix(res.SourceRef, "macro_") {
 			macroParts = append(macroParts, "- "+res.Title+": "+res.Content)
 		} else {
-			contextParts = append(contextParts, "## "+res.Title+"\n"+res.Content)
+			lower := strings.ToLower(res.Content)
+			skip := false
+			for _, kw := range shippingFilterWords {
+				if strings.Contains(lower, kw) {
+					skip = true
+					break
+				}
+			}
+			if !skip {
+				contextParts = append(contextParts, "## "+res.Title+"\n"+res.Content)
+			}
 		}
 	}
 	contextStr := strings.Join(contextParts, "\n\n")
@@ -674,6 +719,79 @@ func (app *App) queryExternalSearch(searchURL, query string, limit int, headers 
 	return &result, nil
 }
 
+// queryExternalMultiSearch issues one POST against a Meilisearch
+// `/multi-search` endpoint that bundles a single named-index query.
+// Used when the admin endpoints config maps an intent to
+// `multi-search:<indexUid>` or `multi-search:<indexUid>:<filter>` —
+// useful for instances where one Meilisearch host indexes multiple
+// stores and a per-store filter expression (e.g. `store_id = 1`) keeps
+// results scoped. The same SSRF-guarded client used by
+// queryExternalSearch is reused so admin-supplied URLs cannot pivot to
+// private targets. The response is unwrapped to the first results
+// entry so callers see the same `*ExternalSearchResponse` shape as the
+// per-index path. Empty `results` from the API yields an empty
+// response (not an error) so the caller's "no hits" branch handles it
+// uniformly. Mirrors v1.0.3 cf97cb06 — adapted to take an App receiver
+// so the SSRF client and UA header are shared with queryExternalSearch.
+func (app *App) queryExternalMultiSearch(searchURL, indexUid, query string, limit int, filter string, headers map[string]string) (*ExternalSearchResponse, error) {
+	qObj := map[string]interface{}{
+		"indexUid": indexUid,
+		"q":        query,
+		"limit":    limit,
+	}
+	if filter != "" {
+		qObj["filter"] = []string{filter}
+	}
+	payload, err := json.Marshal(map[string]interface{}{
+		"queries": []interface{}{qObj},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, searchURL, bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", "Libredesk/2")
+	}
+
+	client := app.extSearchClient
+	if client == nil {
+		return nil, fmt.Errorf("external search HTTP client not initialised")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		if strings.Contains(err.Error(), "blocked") || strings.Contains(err.Error(), "denied") {
+			return nil, fmt.Errorf("blocked by SSRF guard: %w", err)
+		}
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("multi-search returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var multiResult MultiSearchResponse
+	if err := json.Unmarshal(body, &multiResult); err != nil {
+		return nil, fmt.Errorf("failed to parse multi-search response: %w", err)
+	}
+	if len(multiResult.Results) == 0 {
+		return &ExternalSearchResponse{}, nil
+	}
+	return &multiResult.Results[0], nil
+}
+
 // performExternalSearch fans out one HTTP call per matched intent and
 // formats the hits into a Markdown-ish context block fed into the
 // system prompt via {{external_search_results}}. Empty endpoint config,
@@ -720,8 +838,31 @@ func (app *App) performExternalSearch(aiSettings settingmodels.InboxAISettings, 
 		if !ok {
 			continue
 		}
-		searchURL := baseURL + endpointPath
-		results, err := app.queryExternalSearch(searchURL, intent.Query, maxResults, headers)
+
+		// T3u: dispatch on `multi-search:` prefix. This format selects
+		// Meilisearch's `/multi-search` API instead of the per-index
+		// `/indexes/<idx>/search` API, optionally with a Meilisearch
+		// filter expression carried as the third colon-delimited
+		// segment. Endpoints without the prefix continue to use the
+		// existing per-index path so existing admin configs keep
+		// working unchanged.
+		var (
+			results *ExternalSearchResponse
+			err     error
+		)
+		if strings.HasPrefix(endpointPath, "multi-search:") {
+			parts := strings.SplitN(endpointPath, ":", 3)
+			indexUid := parts[1]
+			filter := ""
+			if len(parts) == 3 {
+				filter = parts[2]
+			}
+			fullURL := baseURL + "/multi-search"
+			results, err = app.queryExternalMultiSearch(fullURL, indexUid, intent.Query, maxResults, filter, headers)
+		} else {
+			searchURL := baseURL + endpointPath
+			results, err = app.queryExternalSearch(searchURL, intent.Query, maxResults, headers)
+		}
 		if err != nil {
 			app.lo.Warn("external search query failed", "type", intent.Type, "query", intent.Query, "error", err)
 			continue
@@ -757,7 +898,55 @@ func (app *App) performExternalSearch(aiSettings settingmodels.InboxAISettings, 
 					line += " - " + price
 				}
 				line += " - " + stock
+				// T3u: build per-SKU stock summary for products with size/
+				// option variants. Each SKU's status is "<qty> in stock" or
+				// "out of stock"; map iteration order is non-deterministic,
+				// which matches v1.0.3 — the LLM doesn't rely on order, just
+				// presence/absence of each SKU.
+				skuStock := ""
+				if len(hit.SkuStockData) > 0 {
+					var skuParts []string
+					for sku, data := range hit.SkuStockData {
+						qty := 0
+						if q, ok := data["qty"].(float64); ok {
+							qty = int(q)
+						}
+						inStk := false
+						if s, ok := data["in_stock"].(float64); ok && s > 0 {
+							inStk = true
+						}
+						status := "out of stock"
+						if inStk {
+							status = fmt.Sprintf("%d in stock", qty)
+						}
+						skuParts = append(skuParts, fmt.Sprintf("%s: %s", sku, status))
+					}
+					skuStock = strings.Join(skuParts, ", ")
+				}
+				// T3u: shipping label per product. DisableFreeShip="Yes"
+				// always wins (admin-curated override). Otherwise infer from
+				// AUD default price: AUD$150 is the AU free-shipping
+				// threshold on Mage Australia / Trabulium stores; below
+				// that, "STANDARD SHIPPING ($5)". Non-AUD currencies and
+				// missing-price products get no shipping line at all
+				// (silent fallthrough) — better than misleading the LLM.
+				if strings.EqualFold(hit.DisableFreeShip, "Yes") {
+					line += " - CUSTOM FREIGHT QUOTE REQUIRED"
+				} else {
+					if aud, ok := hit.Price["AUD"]; ok {
+						if audMap, ok := aud.(map[string]interface{}); ok {
+							if defPrice, ok := audMap["default"].(float64); ok && defPrice >= 150 {
+								line += " - FREE SHIPPING"
+							} else {
+								line += " - STANDARD SHIPPING ($5)"
+							}
+						}
+					}
+				}
 				line += "\n   URL: " + hit.URL
+				if skuStock != "" {
+					line += "\n   Stock by size/option: " + skuStock
+				}
 				desc := stripHTMLForExternalSearch(hit.Description)
 				if len(desc) > 200 {
 					desc = desc[:200] + "..."
@@ -786,8 +975,24 @@ func (app *App) performExternalSearch(aiSettings settingmodels.InboxAISettings, 
 			sections = append(sections, "=== Category Results (from website) ===\n"+strings.Join(lines, "\n\n"))
 
 		case "faq":
+			// T3u: same bulky/freight skip as the KB-context loop above —
+			// FAQ entries about generic shipping policy contradict the
+			// per-product shipping tags. Combined Q + A is lower-cased
+			// once and substring-matched against the same word list.
+			skipKeywords := []string{"bulky", "oversized", "freight", "courier"}
 			var lines []string
 			for i, hit := range results.Hits {
+				combined := strings.ToLower(hit.Question + " " + hit.Answer)
+				skip := false
+				for _, kw := range skipKeywords {
+					if strings.Contains(combined, kw) {
+						skip = true
+						break
+					}
+				}
+				if skip {
+					continue
+				}
 				line := fmt.Sprintf("%d. Q: %s\n   A: %s", i+1, hit.Question, hit.Answer)
 				line += "\n   URL: " + hit.URL
 				lines = append(lines, line)
