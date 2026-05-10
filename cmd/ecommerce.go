@@ -10,6 +10,7 @@ import (
 	"github.com/abhinavxd/libredesk/internal/stringutil"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"github.com/zerodha/logf"
 )
 
 const (
@@ -165,7 +166,7 @@ func handleTestEcommerceConnection(r *fastglue.Request) error {
 		ExtraConfig:  req.ExtraConfig,
 	}
 
-	provider, err := createEcommerceProvider(config)
+	provider, err := createEcommerceProvider(config, app.lo)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, envelope.InputError)
 	}
@@ -248,15 +249,15 @@ func handleTestEcommerceOrderLookup(r *fastglue.Request) error {
 // createEcommerceProvider creates a provider instance from config. Returns
 // (nil, nil) for unknown provider types so callers can distinguish "type not
 // supported" from "construction failed".
-func createEcommerceProvider(config ecommerce.ProviderConfig) (ecommerce.Provider, error) {
+func createEcommerceProvider(config ecommerce.ProviderConfig, lo *logf.Logger) (ecommerce.Provider, error) {
 	switch config.Type {
 	case "magento1":
-		return magento1.New(config)
+		return magento1.New(config, lo)
 	// Future providers:
 	// case "magento2":
-	//     return magento2.New(config)
+	//     return magento2.New(config, lo)
 	// case "shopify":
-	//     return shopify.New(config)
+	//     return shopify.New(config, lo)
 	default:
 		return nil, nil
 	}
@@ -301,7 +302,7 @@ func initEcommerceManager(app *App) error {
 		ExtraConfig:  extraConfig,
 	}
 
-	provider, err := createEcommerceProvider(config)
+	provider, err := createEcommerceProvider(config, app.lo)
 	if err != nil {
 		app.lo.Error("failed to create ecommerce provider", "error", err)
 		app.ecommerce = nil

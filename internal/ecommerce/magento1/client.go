@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"runtime/debug"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/abhinavxd/libredesk/internal/ecommerce"
+	"github.com/zerodha/logf"
 )
 
 // Client implements the ecommerce.Provider interface for Maho Commerce
@@ -22,6 +22,7 @@ type Client struct {
 	auth      *authClient
 	http      *http.Client
 	userAgent string
+	lo        *logf.Logger
 }
 
 // userAgentString returns "libredesk/<version>" derived from the embedded
@@ -53,16 +54,17 @@ func userAgentString() string {
 // Maho's API Platform v2 supports the OAuth2 client_credentials grant at
 // /api/rest/v2/auth/token. ClientID and ClientSecret are the OAuth2 client
 // credentials (ClientSecret is encrypted at rest by the settings layer).
-func New(config ecommerce.ProviderConfig) (*Client, error) {
+func New(config ecommerce.ProviderConfig, lo *logf.Logger) (*Client, error) {
 	if config.BaseURL == "" || config.ClientID == "" || config.ClientSecret == "" {
 		return nil, fmt.Errorf("magento1: baseURL, clientID, and clientSecret are required")
 	}
 	ua := userAgentString()
 	return &Client{
 		baseURL:   config.BaseURL,
-		auth:      newAuthClient(config.BaseURL, config.ClientID, config.ClientSecret, ua),
+		auth:      newAuthClient(config.BaseURL, config.ClientID, config.ClientSecret, ua, lo),
 		http:      &http.Client{Timeout: 60 * time.Second},
 		userAgent: ua,
+		lo:        lo,
 	}, nil
 }
 
@@ -80,7 +82,7 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, params url.Valu
 		u += "?" + params.Encode()
 	}
 
-	log.Printf("[ecommerce] GET %s", u)
+	c.lo.Debug("GET", "url", u)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
@@ -101,7 +103,7 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, params url.Valu
 		return nil, resp.StatusCode, err
 	}
 
-	log.Printf("[ecommerce] Response %d (%d bytes)", resp.StatusCode, len(body))
+	c.lo.Debug("response", "status", resp.StatusCode, "bytes", len(body))
 
 	return body, resp.StatusCode, nil
 }
@@ -113,7 +115,7 @@ type hydraCollection struct {
 }
 
 // unwrapCollection handles both Hydra {"member":[...]} and plain arrays
-func unwrapCollection(body []byte) (json.RawMessage, error) {
+func (c *Client) unwrapCollection(body []byte) (json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(body)
 	if len(trimmed) > 0 && trimmed[0] == '[' {
 		return json.RawMessage(trimmed), nil
@@ -125,7 +127,7 @@ func unwrapCollection(body []byte) (json.RawMessage, error) {
 	if col.Member == nil {
 		return json.RawMessage("[]"), nil
 	}
-	log.Printf("[ecommerce] Hydra collection: totalItems=%d", col.TotalItems)
+	c.lo.Debug("hydra collection", "total_items", col.TotalItems)
 	return col.Member, nil
 }
 
@@ -139,7 +141,7 @@ func (c *Client) GetCustomerByEmail(ctx context.Context, email string) (*ecommer
 		return nil, fmt.Errorf("API returned %d", status)
 	}
 
-	members, err := unwrapCollection(body)
+	members, err := c.unwrapCollection(body)
 	if err != nil {
 		return nil, fmt.Errorf("decode collection: %w", err)
 	}
@@ -153,7 +155,7 @@ func (c *Client) GetCustomerByEmail(ctx context.Context, email string) (*ecommer
 	}
 
 	c0 := customers[0]
-	log.Printf("[ecommerce] found customer: %s %s (%s)", c0.FirstName, c0.LastName, c0.Email)
+	c.lo.Debug("found customer", "first_name", c0.FirstName, "last_name", c0.LastName, "email", c0.Email)
 	return c0.toEcommerce(), nil
 }
 
@@ -168,7 +170,7 @@ func (c *Client) GetOrdersByEmail(ctx context.Context, email string, limit int) 
 		return nil, fmt.Errorf("API returned %d", status)
 	}
 
-	members, err := unwrapCollection(body)
+	members, err := c.unwrapCollection(body)
 	if err != nil {
 		return nil, fmt.Errorf("decode collection: %w", err)
 	}
@@ -178,7 +180,7 @@ func (c *Client) GetOrdersByEmail(ctx context.Context, email string, limit int) 
 		return nil, fmt.Errorf("decode orders: %w", err)
 	}
 
-	log.Printf("[ecommerce] found %d orders for %s", len(orders), email)
+	c.lo.Debug("found orders", "count", len(orders), "email", email)
 
 	result := make([]ecommerce.Order, len(orders))
 	for i, o := range orders {
@@ -197,7 +199,7 @@ func (c *Client) GetOrderByNumber(ctx context.Context, orderNumber string) (*eco
 		return nil, fmt.Errorf("API returned %d", status)
 	}
 
-	members, err := unwrapCollection(body)
+	members, err := c.unwrapCollection(body)
 	if err != nil {
 		return nil, fmt.Errorf("decode collection: %w", err)
 	}
@@ -210,7 +212,7 @@ func (c *Client) GetOrderByNumber(ctx context.Context, orderNumber string) (*eco
 		return nil, ecommerce.ErrNotFound
 	}
 
-	log.Printf("[ecommerce] found order #%s status=%s history_entries=%d", orders[0].IncrementID, orders[0].Status, len(orders[0].StatusHistory))
+	c.lo.Debug("found order", "increment_id", orders[0].IncrementID, "status", orders[0].Status, "history_entries", len(orders[0].StatusHistory))
 	order := orders[0].toEcommerce()
 	return &order, nil
 }

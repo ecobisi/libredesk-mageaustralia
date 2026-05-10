@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zerodha/logf"
 )
 
 type tokenResponse struct {
@@ -30,6 +31,8 @@ type authClient struct {
 	mu          sync.RWMutex
 	token       string
 	tokenExpiry time.Time
+
+	lo *logf.Logger
 }
 
 // debugLogOnce gates a one-time raw response body log so we can confirm the
@@ -39,13 +42,14 @@ var debugLogOnce sync.Once
 // jwtPattern matches a JWT-shaped string (three base64-url chunks separated by dots).
 var jwtPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$`)
 
-func newAuthClient(baseURL, clientID, clientSecret, userAgent string) *authClient {
+func newAuthClient(baseURL, clientID, clientSecret, userAgent string, lo *logf.Logger) *authClient {
 	return &authClient{
 		baseURL:      baseURL,
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		userAgent:    userAgent,
 		httpClient:   &http.Client{Timeout: 30 * time.Second},
+		lo:           lo,
 	}
 }
 
@@ -80,7 +84,7 @@ func (a *authClient) refreshToken() (string, error) {
 	body, _ := json.Marshal(payload)
 
 	tokenURL := a.baseURL + "/api/rest/v2/auth/token"
-	log.Printf("[ecommerce] Requesting token from: %s", tokenURL)
+	a.lo.Debug("requesting token", "url", tokenURL)
 
 	req, err := http.NewRequest(http.MethodPost, tokenURL, bytes.NewBuffer(body))
 	if err != nil {
@@ -103,7 +107,7 @@ func (a *authClient) refreshToken() (string, error) {
 		if len(bodyStr) > 200 {
 			bodyStr = bodyStr[:200] + "..."
 		}
-		log.Printf("[ecommerce] Token request failed: status=%d", resp.StatusCode)
+		a.lo.Warn("token request failed", "status", resp.StatusCode)
 		return "", fmt.Errorf("POST %s returned %d: %s", tokenURL, resp.StatusCode, bodyStr)
 	}
 
@@ -114,7 +118,7 @@ func (a *authClient) refreshToken() (string, error) {
 		if len(preview) > 500 {
 			preview = preview[:500] + "...(truncated)"
 		}
-		log.Printf("[ecommerce] DEBUG raw token response (one-time): status=%d body=%s", resp.StatusCode, preview)
+		a.lo.Debug("raw token response (one-time)", "status", resp.StatusCode, "body", preview)
 	})
 
 	var tokenResp tokenResponse
@@ -131,7 +135,7 @@ func (a *authClient) refreshToken() (string, error) {
 		if err := json.Unmarshal(respBody, &raw); err == nil {
 			for k, v := range raw {
 				if s, ok := v.(string); ok && jwtPattern.MatchString(s) {
-					log.Printf("[ecommerce] token field 'token' empty; using JWT-shaped value from field %q", k)
+					a.lo.Warn("token field 'token' empty; using JWT-shaped value from alternate field", "field", k)
 					tokenStr = s
 					break
 				}
@@ -147,7 +151,7 @@ func (a *authClient) refreshToken() (string, error) {
 		return "", fmt.Errorf("token response did not contain a JWT-shaped token; body=%s", strings.TrimSpace(preview))
 	}
 
-	log.Printf("[ecommerce] Token obtained successfully, expires in %d seconds", tokenResp.ExpiresIn)
+	a.lo.Info("token obtained", "expires_in_seconds", tokenResp.ExpiresIn)
 	a.token = tokenStr
 
 	// Default to a 1-hour TTL if expires_in isn't provided; refresh 5 minutes
