@@ -73,7 +73,7 @@ func (m *Manager) Completion(k string, prompt string) (string, error) {
 		return "", err
 	}
 
-	client, err := m.getDefaultProviderClient()
+	client, providerName, err := m.getDefaultProviderClient()
 	if err != nil {
 		m.lo.Error("error getting provider client", "error", err)
 		return "", envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
@@ -92,7 +92,7 @@ func (m *Manager) Completion(k string, prompt string) (string, error) {
 		}
 		if errors.Is(err, ErrApiKeyNotSet) {
 			m.lo.Error("error API key not set", "error", err)
-			return "", envelope.NewError(envelope.InputError, m.i18n.Ts("ai.apiKeyNotSet", "provider", "OpenAI"), nil)
+			return "", envelope.NewError(envelope.InputError, m.i18n.Ts("ai.apiKeyNotSet", "provider", providerName), nil)
 		}
 		m.lo.Error("error sending prompt to provider", "error", err)
 		return "", envelope.NewError(envelope.GeneralError, err.Error(), nil)
@@ -438,7 +438,7 @@ func (m *Manager) CompletionWithSystemPrompt(systemPrompt, userPrompt string) (s
 // "real" implementation; CompletionWithSystemPrompt now delegates so
 // the text-only call path remains a one-liner.
 func (m *Manager) CompletionWithPayload(payload PromptPayload) (string, error) {
-	client, err := m.getDefaultProviderClient()
+	client, providerName, err := m.getDefaultProviderClient()
 	if err != nil {
 		m.lo.Error("error getting provider client", "error", err)
 		return "", err
@@ -452,7 +452,7 @@ func (m *Manager) CompletionWithPayload(payload PromptPayload) (string, error) {
 		}
 		if errors.Is(err, ErrApiKeyNotSet) {
 			m.lo.Error("error API key not set", "error", err)
-			return "", envelope.NewError(envelope.InputError, m.i18n.Ts("ai.apiKeyNotSet", "provider", "AI Provider"), nil)
+			return "", envelope.NewError(envelope.InputError, m.i18n.Ts("ai.apiKeyNotSet", "provider", providerName), nil)
 		}
 		m.lo.Error("error sending prompt to provider", "error", err)
 		return "", envelope.NewError(envelope.GeneralError, err.Error(), nil)
@@ -460,14 +460,31 @@ func (m *Manager) CompletionWithPayload(payload PromptPayload) (string, error) {
 	return response, nil
 }
 
-// getDefaultProviderClient returns a ProviderClient for the default provider.
-func (m *Manager) getDefaultProviderClient() (ProviderClient, error) {
+// providerDisplayName returns the human-readable name for a provider key
+// ("openai" → "OpenAI", "openrouter" → "OpenRouter"). Falls back to the
+// generic "AI provider" label so error messages stay sensible if a new
+// provider is added without updating this map.
+func providerDisplayName(p ProviderType) string {
+	for _, info := range SupportedProviders {
+		if info.Provider == string(p) {
+			return info.Name
+		}
+	}
+	return "AI provider"
+}
+
+// getDefaultProviderClient returns a ProviderClient for the default provider
+// along with its human-readable display name (so callers can surface an
+// accurate error message when the provider's API key is missing/invalid).
+func (m *Manager) getDefaultProviderClient() (ProviderClient, string, error) {
 	var p models.Provider
 
 	if err := m.q.GetDefaultProvider.Get(&p); err != nil {
 		m.lo.Error("error fetching provider details", "error", err)
-		return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+		return nil, "", envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 	}
+
+	displayName := providerDisplayName(ProviderType(p.Provider))
 
 	switch ProviderType(p.Provider) {
 	case ProviderOpenAI:
@@ -476,15 +493,15 @@ func (m *Manager) getDefaultProviderClient() (ProviderClient, error) {
 		}{}
 		if err := json.Unmarshal([]byte(p.Config), &config); err != nil {
 			m.lo.Error("error parsing provider config", "error", err)
-			return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+			return nil, displayName, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 		}
 		// Decrypt API key.
 		decryptedKey, err := crypto.Decrypt(config.APIKey, m.encryptionKey)
 		if err != nil {
 			m.lo.Error("error decrypting API key", "error", err)
-			return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+			return nil, displayName, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 		}
-		return NewOpenAIClient(decryptedKey, m.lo), nil
+		return NewOpenAIClient(decryptedKey, m.lo), displayName, nil
 	case ProviderOpenRouter:
 		config := struct {
 			APIKey string `json:"api_key"`
@@ -492,7 +509,7 @@ func (m *Manager) getDefaultProviderClient() (ProviderClient, error) {
 		}{}
 		if err := json.Unmarshal([]byte(p.Config), &config); err != nil {
 			m.lo.Error("error parsing provider config", "error", err)
-			return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+			return nil, displayName, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 		}
 		// Decrypt the API key (encrypted at rest since T3j, mirroring
 		// the OpenAI path). An empty key isn't fatal: the client
@@ -506,13 +523,13 @@ func (m *Manager) getDefaultProviderClient() (ProviderClient, error) {
 			decryptedKey, err := crypto.Decrypt(apiKey, m.encryptionKey)
 			if err != nil {
 				m.lo.Error("error decrypting OpenRouter API key", "error", err)
-				return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+				return nil, displayName, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 			}
 			apiKey = decryptedKey
 		}
-		return NewOpenRouterClient(apiKey, config.Model, m.lo), nil
+		return NewOpenRouterClient(apiKey, config.Model, m.lo), displayName, nil
 	default:
 		m.lo.Error("unsupported provider type", "provider", p.Provider)
-		return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("validation.invalidProvider"), nil)
+		return nil, displayName, envelope.NewError(envelope.GeneralError, m.i18n.T("validation.invalidProvider"), nil)
 	}
 }
