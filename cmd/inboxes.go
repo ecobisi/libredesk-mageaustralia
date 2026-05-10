@@ -474,14 +474,14 @@ func handleGetInboxSignature(r *fastglue.Request) error {
 
 	inboxID, err := strconv.Atoi(r.RequestCtx.UserValue("id").(string))
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid inbox ID", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("validation.invalidInbox"), nil, envelope.InputError)
 	}
 
 	conversationUUID := string(r.RequestCtx.QueryArgs().Peek("conversation_uuid"))
 
 	inboxRecord, err := app.inbox.GetDBRecord(inboxID)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Inbox not found", nil, envelope.NotFoundError)
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, app.i18n.T("validation.notFoundInbox"), nil, envelope.NotFoundError)
 	}
 
 	// Only the signature field is needed; decode loosely so an inbox config

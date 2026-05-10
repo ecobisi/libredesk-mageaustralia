@@ -136,20 +136,20 @@ func handleSubmitCSATResponse(r *fastglue.Request) error {
 	)
 
 	if err := r.Decode(&req, "json"); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid JSON", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
 	}
 
 	if req.Rating < 0 || req.Rating > 5 {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Rating must be between 0 and 5 (0 means no rating)", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("csat.invalidRating"), nil, envelope.InputError)
 	}
 
 	// At least one of rating or feedback must be provided
 	if req.Rating == 0 && req.Feedback == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Either rating or feedback must be provided", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("csat.pleaseFillRequired"), nil, envelope.InputError)
 	}
 
 	if uuid == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid UUID", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.invalid", "name", "UUID"), nil, envelope.InputError)
 	}
 
 	// Trim feedback if it exceeds max length.

@@ -137,10 +137,10 @@ func handleTestEmailNotificationSettings(r *fastglue.Request) error {
 
 	// Validate test email.
 	if req.TestEmail == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Test email address is required", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.required", "name", "{globals.terms.email}"), nil, envelope.InputError)
 	}
 	if _, err := mail.ParseAddress(req.TestEmail); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid test email address", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("validation.invalidEmail"), nil, envelope.InputError)
 	}
 
 	addLog("Starting SMTP test to %s", req.TestEmail)

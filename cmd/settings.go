@@ -184,7 +184,7 @@ func handleUpdateTrashSettings(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
 	}
 	if req.AutoTrashResolvedDays < 0 || req.AutoTrashSpamDays < 0 || req.AutoDeleteDays < 0 || req.ActivityPurgeDays < 0 {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Day values must be 0 or greater", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.invalid", "name", "{globals.terms.day}"), nil, envelope.InputError)
 	}
 	if err := app.setting.Update(req); err != nil {
 		return sendErrorEnvelope(r, err)
@@ -243,17 +243,17 @@ func handleUpdateAISettings(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
 	}
 	if req.TranscriptionProvider != "" && req.TranscriptionProvider != "openai" && req.TranscriptionProvider != "local" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid transcription provider. Use: openai or local", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.invalidValueFor", "name", "transcription_provider", "options", "openai, local"), nil, envelope.InputError)
 	}
 	// Clamp the tuning numerics to reject malformed input outright (the
 	// rag.go handler also has runtime fallbacks for stale rows, but
 	// silent acceptance of nonsense at save-time would let admins
 	// believe a value is in effect when it's actually being ignored).
 	if req.MaxContextChunks < 0 || req.MaxContextChunks > 50 {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "max_context_chunks must be between 0 and 50", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("admin.ai.rag.maxContextChunksInvalid"), nil, envelope.InputError)
 	}
 	if req.SimilarityThreshold < 0 || req.SimilarityThreshold > 1 {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "similarity_threshold must be between 0 and 1", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("admin.ai.rag.similarityThresholdInvalid"), nil, envelope.InputError)
 	}
 	// T3d external-search bounds. Negative = nonsense; >10 results per
 	// endpoint is well past what the LLM can usefully reason about and
@@ -263,7 +263,7 @@ func handleUpdateAISettings(r *fastglue.Request) error {
 	// half-finished JSON during edit and the runtime degrades to "no
 	// external search".
 	if req.ExternalSearchMaxResults < 0 || req.ExternalSearchMaxResults > 10 {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "external_search_max_results must be between 0 and 10", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("admin.ai.externalSearch.maxResultsInvalid"), nil, envelope.InputError)
 	}
 	if err := app.setting.Update(req); err != nil {
 		return sendErrorEnvelope(r, err)
@@ -285,7 +285,7 @@ func handleUpdatePCISettings(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("globals.messages.badRequest"), nil, envelope.InputError)
 	}
 	if req.NotifyMethod != "" && req.NotifyMethod != "in_app" && req.NotifyMethod != "email" && req.NotifyMethod != "both" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid notification method. Use: in_app, email, or both", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.invalidValueFor", "name", "notify_method", "options", "in_app, email, both"), nil, envelope.InputError)
 	}
 	if err := app.setting.Update(req); err != nil {
 		return sendErrorEnvelope(r, err)

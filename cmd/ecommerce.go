@@ -148,13 +148,13 @@ func handleTestEcommerceConnection(r *fastglue.Request) error {
 
 	// Validate required fields.
 	if req.Type == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Provider type is required", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.required", "name", "{globals.terms.provider}"), nil, envelope.InputError)
 	}
 	if req.BaseURL == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Base URL is required", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.required", "name", "{globals.terms.url}"), nil, envelope.InputError)
 	}
 	if req.ClientSecret == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Client secret is required", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.required", "name", "{globals.terms.clientSecret}"), nil, envelope.InputError)
 	}
 
 	// Create provider for testing.
@@ -171,14 +171,14 @@ func handleTestEcommerceConnection(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, envelope.InputError)
 	}
 	if provider == nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Unknown provider type: "+req.Type, nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("validation.invalidProvider"), nil, envelope.InputError)
 	}
 
 	// Test the connection. SS3: log full error server-side, return generic
 	// message to client.
 	if err := provider.TestConnection(r.RequestCtx); err != nil {
 		app.lo.Error("ecommerce connection test failed", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Connection failed. Check your settings and try again.", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("admin.ecommerce.connectionFailed"), nil, envelope.InputError)
 	}
 
 	return r.SendEnvelope(map[string]string{"status": "ok", "message": "Connection successful"})
@@ -202,19 +202,20 @@ func handleTestEcommerceCustomerLookup(r *fastglue.Request) error {
 
 	email := string(r.RequestCtx.QueryArgs().Peek("email"))
 	if email == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Email is required", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.required", "name", "{globals.terms.email}"), nil, envelope.InputError)
 	}
 
 	// T3ae diagnostic logging.
 	app.lo.Info("ecommerce test lookup request", "kind", "customer", "email", email)
 
 	if app.ecommerce == nil || !app.ecommerce.IsConfigured() {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Ecommerce not configured", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("admin.ecommerce.notConfigured"), nil, envelope.InputError)
 	}
 
 	ctx, err := app.ecommerce.GatherFullContext(r.RequestCtx, email, nil, 10)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Lookup failed: "+err.Error(), nil, envelope.GeneralError)
+		app.lo.Error("ecommerce customer lookup failed", "error", err, "email", email)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, app.i18n.T("globals.messages.somethingWentWrong"), nil, envelope.GeneralError)
 	}
 
 	return r.SendEnvelope(ctx)
@@ -228,19 +229,20 @@ func handleTestEcommerceOrderLookup(r *fastglue.Request) error {
 
 	orderNumber := string(r.RequestCtx.QueryArgs().Peek("order_number"))
 	if orderNumber == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Order number is required", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.Ts("globals.messages.required", "name", "{globals.terms.orderNumber}"), nil, envelope.InputError)
 	}
 
 	// T3ae diagnostic logging.
 	app.lo.Info("ecommerce test lookup request", "kind", "order", "order_number", orderNumber)
 
 	if app.ecommerce == nil || !app.ecommerce.IsConfigured() {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Ecommerce not configured", nil, envelope.InputError)
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, app.i18n.T("admin.ecommerce.notConfigured"), nil, envelope.InputError)
 	}
 
 	order, err := app.ecommerce.GetOrderByNumber(r.RequestCtx, orderNumber)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Order not found: "+err.Error(), nil, envelope.NotFoundError)
+		app.lo.Warn("ecommerce order lookup failed", "error", err, "order_number", orderNumber)
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, app.i18n.T("admin.ecommerce.orderNotFound"), nil, envelope.NotFoundError)
 	}
 
 	return r.SendEnvelope(order)
