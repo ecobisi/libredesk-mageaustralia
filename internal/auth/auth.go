@@ -6,17 +6,15 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
-	"net/netip"
 	"sync"
 	"time"
 
 	amodels "github.com/abhinavxd/libredesk/internal/auth/models"
 	"github.com/abhinavxd/libredesk/internal/envelope"
+	"github.com/abhinavxd/libredesk/internal/httputil"
 	"github.com/abhinavxd/libredesk/internal/stringutil"
 	"github.com/abhinavxd/libredesk/internal/user/models"
-	"github.com/abhinavxd/ssrfguard"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/knadh/go-i18n"
 	"github.com/redis/go-redis/v9"
@@ -86,33 +84,19 @@ type Auth struct {
 }
 
 // newSSRFGuardedClient builds an *http.Client whose dialer rejects connections
-// to private/reserved IP ranges. The check fires after DNS resolution but
-// before the TCP handshake, so it also defends against DNS-rebinding attacks.
-// allowedCIDRs lists prefixes permitted to bypass the deny list (e.g. for
-// self-hosted IdPs on internal networks).
+// to private/reserved IP ranges. Thin wrapper over httputil.NewSSRFGuardedClient
+// pinning the auth/oidc-specific timeout budget (15s overall, 10s for response
+// headers — OIDC discovery + JWKS fetches can be slow on cold IdPs).
 func newSSRFGuardedClient(allowedCIDRs []string, logger *logf.Logger) *http.Client {
-	var prefixes []netip.Prefix
-	for _, h := range allowedCIDRs {
-		prefix, err := netip.ParsePrefix(h)
-		if err != nil {
-			logger.Warn("ignoring invalid auth `allowed_hosts` entry", "entry", h, "error", err)
-			continue
-		}
-		prefixes = append(prefixes, prefix)
-	}
-	guard := ssrfguard.New(prefixes...)
-	return &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   5 * time.Second,
-				KeepAlive: 30 * time.Second,
-				Control:   guard.Control,
-			}).DialContext,
-			TLSHandshakeTimeout:   5 * time.Second,
-			ResponseHeaderTimeout: 10 * time.Second,
-		},
-	}
+	return httputil.NewSSRFGuardedClient(httputil.SSRFGuardedClientOpts{
+		AllowedHosts:          allowedCIDRs,
+		Lo:                    logger,
+		HostsConfigName:       "auth",
+		Timeout:               15 * time.Second,
+		DialTimeout:           5 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+	})
 }
 
 // New creates an Auth service with configured OIDC providers

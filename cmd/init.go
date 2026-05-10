@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +28,7 @@ import (
 	"github.com/abhinavxd/libredesk/internal/conversation/status"
 	"github.com/abhinavxd/libredesk/internal/csat"
 	customAttribute "github.com/abhinavxd/libredesk/internal/custom_attribute"
+	"github.com/abhinavxd/libredesk/internal/httputil"
 	"github.com/abhinavxd/libredesk/internal/importer"
 	"github.com/abhinavxd/libredesk/internal/inbox"
 	"github.com/abhinavxd/libredesk/internal/inbox/channel/email"
@@ -57,7 +56,6 @@ import (
 	"github.com/abhinavxd/libredesk/internal/view"
 	"github.com/abhinavxd/libredesk/internal/webhook"
 	"github.com/abhinavxd/libredesk/internal/ws"
-	"github.com/abhinavxd/ssrfguard"
 	"github.com/jmoiron/sqlx"
 	"github.com/knadh/go-i18n"
 	kjson "github.com/knadh/koanf/parsers/json"
@@ -1108,28 +1106,15 @@ func initContextLink(db *sqlx.DB, i18n *i18n.I18n) *contextlink.Manager {
 // hop blows the agent UX budget for "Generate Response" anyway.
 func initExternalSearchClient() *http.Client {
 	lo := initLogger("external-search")
-	var prefixes []netip.Prefix
-	for _, h := range ko.Strings("ai.allowed_hosts") {
-		prefix, err := netip.ParsePrefix(h)
-		if err != nil {
-			lo.Warn("ignoring invalid ai `allowed_hosts` entry", "entry", h, "error", err)
-			continue
-		}
-		prefixes = append(prefixes, prefix)
-	}
-	guard := ssrfguard.New(prefixes...)
-	return &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   3 * time.Second,
-				KeepAlive: 30 * time.Second,
-				Control:   guard.Control,
-			}).DialContext,
-			TLSHandshakeTimeout:   3 * time.Second,
-			ResponseHeaderTimeout: 5 * time.Second,
-		},
-	}
+	return httputil.NewSSRFGuardedClient(httputil.SSRFGuardedClientOpts{
+		AllowedHosts:          ko.Strings("ai.allowed_hosts"),
+		Lo:                    lo,
+		HostsConfigName:       "ai",
+		Timeout:               10 * time.Second,
+		DialTimeout:           3 * time.Second,
+		TLSHandshakeTimeout:   3 * time.Second,
+		ResponseHeaderTimeout: 5 * time.Second,
+	})
 }
 
 // initWebhook inits webhook manager.
