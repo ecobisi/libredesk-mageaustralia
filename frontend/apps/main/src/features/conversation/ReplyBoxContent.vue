@@ -134,8 +134,6 @@
       :handleSend="handleSend"
       :messageType="messageType"
       @emojiSelect="handleEmojiSelect"
-      @generateResponse="handleGenerateResponse"
-      @generateWithOrders="handleGenerateWithOrders"
     />
   </div>
 </template>
@@ -363,6 +361,10 @@ const handleAiPromptSelected = (key) => {
   emit('aiPromptSelected', key)
 }
 
+// T3a/T3r: Generate Response + "+ Orders" now bypass the Vue emit chain
+// entirely (see EMITTER_EVENTS.RAG_GENERATE comment) — ReplyBoxMenuBar
+// fires the global emitter event directly and ReplyBox subscribes to it.
+// These local relays remain harmless but unused.
 const handleGenerateResponse = () => {
   emit('generateResponse')
 }

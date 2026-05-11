@@ -1143,6 +1143,10 @@ onMounted(() => {
   emitter.on(EMITTER_EVENTS.RESTORE_SEND, handleRestoreSend)
   emitter.on(EMITTER_EVENTS.SHORTCUT_REPLY, handleShortcutReply)
   emitter.on(EMITTER_EVENTS.SHORTCUT_NOTE, handleShortcutNote)
+  // See EMITTER_EVENTS.RAG_GENERATE comment for why these are on the global
+  // bus instead of the Vue parent-emit chain.
+  emitter.on(EMITTER_EVENTS.RAG_GENERATE, () => handleGenerateResponse(false))
+  emitter.on(EMITTER_EVENTS.RAG_GENERATE_WITH_ORDERS, () => handleGenerateResponse(true))
   // EC14: ensure inboxes are loaded so fromOptions can be computed for
   // the From switcher. fetchInboxes is a no-op if already populated.
   inboxStore.fetchInboxes()
@@ -1157,6 +1161,8 @@ onBeforeUnmount(() => {
   emitter.off(EMITTER_EVENTS.RESTORE_SEND, handleRestoreSend)
   emitter.off(EMITTER_EVENTS.SHORTCUT_REPLY, handleShortcutReply)
   emitter.off(EMITTER_EVENTS.SHORTCUT_NOTE, handleShortcutNote)
+  emitter.off(EMITTER_EVENTS.RAG_GENERATE)
+  emitter.off(EMITTER_EVENTS.RAG_GENERATE_WITH_ORDERS)
 })
 
 // UX10: global R / N shortcuts. App.vue's keydown handler emits these

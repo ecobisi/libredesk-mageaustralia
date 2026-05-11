@@ -17,5 +17,12 @@ export const EMITTER_EVENTS = {
     // emits these; the active conversation's ReplyBox switches messageType
     // and focuses the editor.
     SHORTCUT_REPLY: 'shortcut-reply',
-    SHORTCUT_NOTE: 'shortcut-note'
+    SHORTCUT_NOTE: 'shortcut-note',
+    // T3a / T3r workaround: Vue's parent-emit chain from ReplyBoxMenuBar → ReplyBoxContent → ReplyBox
+    // silently drops these specific events in v2.1.1 + radix-vue Button wrappers (other events on the
+    // same MenuBar like emojiSelect work fine, but generateResponse/generateWithOrders don't reach
+    // the parent listener). Bypass via the global emitter bus — MenuBar emits these and ReplyBox
+    // subscribes in onMounted. Root cause not isolated; keep the bypass until reproduced upstream.
+    RAG_GENERATE: 'rag-generate',
+    RAG_GENERATE_WITH_ORDERS: 'rag-generate-with-orders'
 }

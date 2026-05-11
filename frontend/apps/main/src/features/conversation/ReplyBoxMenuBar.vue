@@ -118,7 +118,7 @@
         class="h-8 px-3 text-xs"
         :disabled="isGenerating"
         :title="$t('replyBox.generateResponse')"
-        @click="emit('generateResponse')"
+        @click="emitter.emit(EMITTER_EVENTS.RAG_GENERATE)"
       >
         <Sparkles class="h-3.5 w-3.5 mr-1.5" :class="{ 'animate-pulse': isGenerating }" />
         {{ isGenerating ? $t('replyBox.generating') : $t('replyBox.generateResponse') }}
@@ -142,7 +142,7 @@
         class="h-8 px-3 text-xs"
         :disabled="isGenerating"
         :title="$t('replyBox.generateWithOrders')"
-        @click="emit('generateWithOrders')"
+        @click="emitter.emit(EMITTER_EVENTS.RAG_GENERATE_WITH_ORDERS)"
       >
         <ShoppingCart class="h-3.5 w-3.5 mr-1.5" :class="{ 'animate-pulse': isGenerating }" />
         {{ isGenerating ? $t('replyBox.generating') : $t('replyBox.plusOrders') }}
