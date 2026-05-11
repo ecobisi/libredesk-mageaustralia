@@ -1,0 +1,5 @@
+# Drop sample PNG/JPG files here if you want the seeder to upload them as
+# inline-image attachments. Today the seeder injects a placeholder via the
+# https://placehold.co/ URL — local images aren't yet wired up because the
+# media-upload endpoint needs multipart form handling and the value-add for
+# screenshot purposes is marginal.

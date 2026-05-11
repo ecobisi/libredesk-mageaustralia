@@ -1,0 +1,4 @@
+# Drop a short WAV/MP3 here if you want the seeder to upload an actual audio
+# attachment and let whisper.cpp transcribe it. Today the seeder fakes the
+# transcript as a private note rather than triggering the worker, because
+# whisper.cpp setup is out of scope for a one-shot seed run.

@@ -452,6 +452,22 @@ docker exec -it libredesk_app ./libredesk --set-system-user-password
 
 Go to `http://localhost:9000` and login with username `System` and the password you set.
 
+### Demo Data (Optional)
+
+If you want a fully-loaded instance for screenshots / screen recordings / demos
+without manual setup, run the demo seeder:
+
+```shell
+cd tools/demo-seeder
+./seed.sh
+```
+
+This loads 3 agents, 2 teams, 2 inboxes, 5 macros, ~20 conversations covering
+every fork feature (spam, trash, merging, PCI redaction, voicemail transcripts,
+inline images, ecommerce, RAG, etc.), and a per-feature screenshot recipe.
+See [`docs/DEMO_SETUP.md`](./docs/DEMO_SETUP.md) for the recipe and the safety
+notes (the seeder refuses to run against non-localhost hosts by default).
+
 ### Frontend Layout (v2)
 
 v2 ships a frontend monorepo under `frontend/`:
