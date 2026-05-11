@@ -38,42 +38,30 @@ export default defineConfig(({ mode, command }) => {
     publicDir: path.resolve(__dirname, 'public'),
     // Separate cache per app to avoid stale/conflicting caches.
     cacheDir: path.resolve(__dirname, `node_modules/.vite-${isWidget ? 'widget' : 'main'}`),
-    server: {
-      cors: { origin: "*" },
-      // Allow access to parent dir so shared-ui imports work in dev.
-      fs: {
-        allow: [path.resolve(__dirname)],
-      },
-      port: isWidget ? 8001 : 8000,
-      proxy: {
-        '/api': {
-          target: 'http://127.0.0.1:9000',
-          changeOrigin: true,
+    server: (() => {
+      // LIBREDESK_API_PORT lets local devs point the proxy at a non-default
+      // backend (e.g. a staging container on 9001) without editing this file.
+      // Defaults to 9000 — the same port the docker-compose.yml app uses.
+      const apiPort = process.env.LIBREDESK_API_PORT || '9000'
+      const httpTarget = `http://127.0.0.1:${apiPort}`
+      const wsTarget = `ws://127.0.0.1:${apiPort}`
+      return {
+        cors: { origin: "*" },
+        // Allow access to parent dir so shared-ui imports work in dev.
+        fs: {
+          allow: [path.resolve(__dirname)],
         },
-        '/widget.js': {
-          target: 'http://127.0.0.1:9000',
-          changeOrigin: true,
+        port: isWidget ? 8001 : 8000,
+        proxy: {
+          '/api':        { target: httpTarget, changeOrigin: true },
+          '/widget.js':  { target: httpTarget, changeOrigin: true },
+          '/logout':     { target: httpTarget, changeOrigin: true },
+          '/uploads':    { target: httpTarget, changeOrigin: true },
+          '/ws':         { target: wsTarget,   ws: true, changeOrigin: true },
+          '/widget/ws':  { target: wsTarget,   ws: true, changeOrigin: true },
         },
-        '/logout': {
-          target: 'http://127.0.0.1:9000',
-          changeOrigin: true,
-        },
-        '/uploads': {
-          target: 'http://127.0.0.1:9000',
-          changeOrigin: true,
-        },
-        '/ws': {
-          target: 'ws://127.0.0.1:9000',
-          ws: true,
-          changeOrigin: true,
-        },
-        '/widget/ws': {
-          target: 'ws://127.0.0.1:9000',
-          ws: true,
-          changeOrigin: true,
-        }
-      },
-    },
+      }
+    })(),
     build: {
       outDir: isWidget
         ? path.resolve(__dirname, 'dist/widget')
