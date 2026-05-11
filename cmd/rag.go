@@ -13,6 +13,7 @@ import (
 
 	"github.com/abhinavxd/libredesk/internal/ai"
 	"github.com/abhinavxd/libredesk/internal/envelope"
+	"github.com/abhinavxd/libredesk/internal/rag"
 	"github.com/abhinavxd/libredesk/internal/rag/models"
 	settingmodels "github.com/abhinavxd/libredesk/internal/setting/models"
 	"github.com/valyala/fasthttp"
@@ -233,31 +234,13 @@ func handleRAGSearch(r *fastglue.Request) error {
 	return r.SendEnvelope(results)
 }
 
-// defaultRAGSystemPrompt is used when ai.system_prompt is empty. Kept
-// in cmd/rag.go (not the settings layer) so the admin-saved empty
-// string round-trips cleanly. Supports the same {{site_name}} /
-// {{today}} / {{context}} / {{macros}} / {{enquiry}} /
-// {{external_search_results}} substitutions as a custom prompt.
-// The customer question is wrapped in <customer_message> XML
-// delimiters so the LLM treats it as opaque user data rather than
-// executable instructions — mitigates "IGNORE ALL PREVIOUS
-// INSTRUCTIONS"-style prompt injection (T3l, mirrors v1.0.3 7f73f8f5).
-// Custom admin-set prompts are not auto-wrapped because admins are
-// trusted to design their own template; the substitution only happens
-// at the {{enquiry}} site.
-const defaultRAGSystemPrompt = `You are a helpful customer support assistant for {{site_name}}. Use the following knowledge base content to answer questions accurately.
-
-Today is {{today}}.
-
-Knowledge Base Context:
-{{context}}
-
-Customer Question:
-<customer_message>
-{{enquiry}}
-</customer_message>
-
-Provide a helpful, accurate response based on the context above. If the context doesn't contain relevant information, let the customer know you'll need to check and get back to them.`
+// defaultRAGSystemPrompt is used when ai.system_prompt is empty. The
+// canonical template lives in internal/rag/default_prompt.go so the
+// v2.2.19 migration can also seed it into the DB on fresh + upgrading
+// installs (where empty rows get the example as a starting point).
+// If the admin clears the prompt back to empty, the code falls back
+// to this same constant.
+var defaultRAGSystemPrompt = rag.DefaultSystemPrompt
 
 // handleRAGGenerateResponse is the agent-facing "Generate Response"
 // endpoint. Takes the customer's most recent message (or full
