@@ -8,19 +8,46 @@ We're not trying to replace or compete with upstream Libredesk — we actively t
 
 **Upstream**: [abhinavxd/libredesk](https://github.com/abhinavxd/libredesk) | [libredesk.io](https://libredesk.io) | [Live demo](https://demo.libredesk.io/)  
 **Base version**: v2.1.1  
-**Companion branch**: [`v1.0.3-plus-enhancements`](https://github.com/mageaustralia/libredesk/tree/v1.0.3-plus-enhancements) — the production fork. This branch is an in-progress port of those features onto v2.1.1 upstream.
+**Companion branch**: [`v1.0.3-plus-enhancements`](https://github.com/mageaustralia/libredesk/tree/v1.0.3-plus-enhancements) — the production fork that this branch was ported from.
 
 ---
 
 ## Port Status
 
-This branch is being actively ported from `v1.0.3-plus-enhancements`. **Most non-AI / non-integration features have landed; Tier 3 (RAG, ecommerce, voicemail transcription, PCI redaction, mobile push) is still pending.** Live unit-by-unit status is in [`docs/superpowers/specs/2026-04-27-v103-port-design.md`](./docs/superpowers/specs/2026-04-27-v103-port-design.md) — search for `pending` to see what's outstanding.
+**Port complete.** This branch is feature-equivalent to `v1.0.3-plus-enhancements` (the production fork) but built on the v2.1.1 base, which adds upstream's frontend monorepo and the live chat widget. The port was executed unit-by-unit against a written spec rather than as a one-shot cherry-pick — 135/135 units done. The full unit-level history (source commits, v2 deltas, verification notes) is at [`docs/superpowers/specs/2026-04-27-v103-port-design.md`](./docs/superpowers/specs/2026-04-27-v103-port-design.md).
+
+## v2 Upstream Features
+
+Worth calling out separately from the fork additions: v2.1.1 introduces an embeddable **live chat widget** for customer websites (`frontend/apps/widget/`). It's not a fork feature, but it's a major capability now available on this branch:
+
+- Embeddable chat widget shipped as a separate Vite app
+- Visitor → contact merging when the user authenticates (JWT from the parent page passed into the iframe)
+- Customisable pre-chat form
+- Redis-backed session tokens with parent-domain cookies (iOS Safari compatible)
+- Email fallback / continuity — if a visitor goes offline, the conversation continues by email
+- Widget dark mode, audio notifications, rate limiting on the public endpoints
+- Online / offline contact status in the agent sidebar (5-minute threshold)
+
+The widget shares a `frontend/shared-ui/` package with the main agent app.
 
 ## Fork Features
 
 Everything from upstream Libredesk is included. The following are additions present in this branch.
 
-**Latest** — Per-user macro MRU sort, macro file attachments, multi-folder IMAP polling, contact-upsert name protection, agent/team name resolution on assignment WS updates, duplicate-outgoing-email guard, HTTP timeout bumps.
+**Latest** — Complete v1.0.3 → v2.1.1 port: all RAG / ecommerce / voicemail / PCI / mobile-push features now on the v2 base. Plus refactors that fell out of the port: consolidated SSRF-guarded HTTP client builder, shared OpenAI/OpenRouter chat completion plumbing, structured logging in the Maho client, and i18n cleanup of error envelopes in `cmd/`.
+
+### Recent Activities
+
+A global activity feed under Reports showing all ticket activities across the helpdesk — similar to Freshdesk's "Recent Activities" panel but as a dedicated page with pagination.
+
+- **Timeline view**: Shows status changes, assignments, priority changes, agent replies — all in a scrollable feed
+- **Agent avatars**: Colour-coded initials with consistent hashing
+- **Ticket links**: Click any reference number to jump to the conversation
+- **Relative timestamps**: "5 minutes ago", "2 hours ago", etc.
+- **"Load more" pagination**: Appends next page to the existing list
+- **Auto-purge setting**: Configurable at Admin > Trash & Cleanup — purge activity messages older than N days (default 7, set to 0 to disable)
+- **No new database tables**: Queries existing `conversation_messages` data directly
+- Navigate to: Reports > Recent Activities
 
 ### Spam & Trash
 
@@ -49,6 +76,15 @@ The "New conversation" dialog gets the same Send & Set Status pattern the reply 
 - **Dynamic list**: pulls from the same statuses store as the reply box, filtered by the admin-controlled `show_on_send` flag — toggle a status's visibility once at Admin > Statuses, both pickers update
 - **Scrollable**: dropdown caps at 60vh with overflow scroll for installs with many statuses
 - Conversation is created and immediately set to the chosen status (Snoozed is excluded since no duration is collected)
+
+### Customer Ticket History on Contact Detail
+
+The contact detail page (`/contacts/{id}`) now shows the full ticket history for that customer, à la Freshdesk's contact view.
+
+- **Tabs**: Previous Conversations (default open) and Notes
+- Lists up to 100 prior conversations with subject, last message preview, and relative timestamps
+- Click any row to jump straight into that conversation
+- Backed by `GET /api/v1/contacts/{id}/conversations` — gated on the existing `contacts:read` permission
 
 ### Advanced View Filters
 
@@ -89,6 +125,17 @@ Real-time awareness of other agents working on the same conversation, preventing
 - **Send confirmation dialog**: Before sending, a confirmation prompt warns if another agent replied since you started typing
 - Presence automatically clears when an agent navigates away or disconnects
 - WebSocket-based with no polling overhead
+
+### FCM Push Notifications (Mobile)
+
+Firebase Cloud Messaging integration for the Flutter mobile app.
+
+- **Push notifications** when tickets are assigned, customers reply, agents are mentioned, etc.
+- **Firebase Admin SDK** for Go — sends notifications server-side
+- **Auto-cleanup**: Invalid/expired device tokens are automatically removed
+- **Push token API**: Register/unregister endpoints for mobile devices
+- **Google mobile auth**: OIDC endpoint for Flutter app Google Sign-In
+- **Docker volume mount**: Firebase service account key mounted read-only into container
 
 ### Customer Reply Notifications
 
@@ -146,6 +193,17 @@ Each conversation row shows the assigned agent and team with inline dropdown men
 - Compact 2x2 grid layout alongside timestamp and unread badge
 - Dropdown menus with full agent/team lists for quick reassignment
 
+### Per-Inbox AI Settings
+
+Each inbox can have its own AI assistant configuration, overriding global defaults.
+
+- **Inbox scope selector** in AI Settings — choose "Global" or a specific inbox
+- **Per-inbox system prompt** — different tone/instructions per brand or inbox
+- **Per-inbox knowledge sources** — restrict which knowledge bases the AI searches for each inbox
+- **Per-inbox external search** — different product catalogues or search endpoints per inbox
+- **Reset to Global** button removes inbox-specific settings to fall back to defaults
+- Backend resolves effective settings: inbox-specific if available, otherwise global
+
 ### Email Alias Filtering
 
 Configure additional email addresses that forward to an inbox, preventing them from appearing in CC when replying.
@@ -154,6 +212,47 @@ Configure additional email addresses that forward to an inbox, preventing them f
 - Aliases are excluded from CC alongside the primary inbox email
 - Handles common setups like `orders@` and `info@` forwarding to a shared inbox
 - **Smart contact detection**: When the conversation contact is an inbox email (e.g., Magento order notifications), scans message history to find the real customer email
+
+### SKU-Level Stock Data in AI Context
+
+Product search results now include per-SKU stock availability for AI responses.
+
+- `sku_stock_data` field parsed from Meilisearch product documents
+- Per-SKU stock details (quantity, in/out of stock) formatted in AI context
+- AI can answer "is size X in stock?" with specific SKU-level information
+
+### Meilisearch Multi-Search Support
+
+External search now supports Meilisearch multi-search API for more flexible product/content queries.
+
+- **Multi-search endpoint format**: `multi-search:indexUid` or `multi-search:indexUid:filter_expression`
+- Single API call searches multiple indexes with optional filters
+- Falls back to standard single-index search for non-multi-search endpoints
+
+### OpenRouter AI Provider
+
+Support for [OpenRouter](https://openrouter.ai/) as an AI provider, giving access to 100+ models (GPT-4o, Claude, Llama, Mistral, etc.) through a single API key.
+
+### RAG AI Assistant Enhancements
+
+Improvements to the built-in RAG AI assistant:
+
+- **Knowledge Sources UI**: Admin page to manage knowledge sources (webpages, macros)
+- **Context limiting**: Conversations trimmed to last 10 messages / 6000 chars to prevent timeouts on long threads
+- **Ecommerce context injection**: Order and customer data included in AI prompts alongside knowledge base results
+- **Extended timeouts**: AI provider HTTP timeouts increased to 60s for large prompts
+- **Per-inbox knowledge source filtering**: RAG search can be scoped to specific knowledge sources per inbox
+- **Inbox-aware settings resolution**: AI generates responses using inbox-specific or global settings automatically
+
+### Ecommerce Integration (Maho Commerce)
+
+Pull customer and order data from a Maho Commerce (Magento-compatible) store into AI-generated responses:
+
+- Customer lookup by email
+- Recent order fetching with items, prices, quantities
+- Conversation scanning for order numbers with automatic detail retrieval
+- Order status history and shipment tracking with carrier-specific URLs
+- Supported carriers: Australia Post, Couriers Please, Team Global Express
 
 ### Fresh Theme
 
@@ -195,6 +294,34 @@ Each inbox can have its own email signature with dynamic placeholders, configure
 - **IMAP connection test** with debug logs in inbox settings
 - **SMTP test** for email notification settings
 
+### Multimodal AI (Image Support)
+
+Conversation attachments (images) are extracted, resized to 500x500, and included as base64 in AI prompts for multimodal models that support vision.
+
+### PCI Credit Card Redaction
+
+Automatic detection and redaction of credit card numbers in incoming messages.
+
+- **Auto-detect on ingest**: Scans incoming messages for card numbers (Luhn-validated with network prefix matching)
+- **Warning banner**: Red banner with "Redact Now" button on messages containing card data
+- **Manual redact**: Agents can immediately scrub card numbers, expiry, and CVV
+- **7-day auto-redact**: Safety net — unreacted messages are automatically scrubbed after 7 days
+- **IMAP deletion**: Attempts to delete the original email from Gmail after redaction
+- **Notification emails scrubbed**: Card numbers are always masked in agent notification emails
+- **Admin settings**: Configure who gets notified on IMAP delete failure (Admin > PCI Redaction)
+- Uses [go-pci-scrub](https://github.com/mageaustralia/go-pci-scrub) library
+
+### Voicemail Transcription
+
+Automatic transcription of voicemail audio attachments using local whisper.cpp.
+
+- **Auto-detect**: Audio attachments (WAV, MP3, OGG, etc.) are automatically queued for transcription
+- **Local whisper.cpp**: Runs on the host via systemd worker — no API costs
+- **OpenAI fallback**: Falls back to OpenAI Whisper API if local transcription fails
+- **Private note**: Transcript inserted as a private note on the conversation
+- **Admin toggle**: Enable/disable and choose provider at Admin > AI Settings
+- Model: `ggml-base.en` (142MB, ~7x realtime on ARM64)
+
 ### Gmail-Style Quoted Thread
 
 Quoted message history in the reply editor, matching Gmail's UX.
@@ -229,6 +356,16 @@ Inline images in outgoing and notification emails use signed URLs with 30-day ex
 - **Notification emails**: Agent notification emails display images correctly in Gmail
 - **Handles quoted replies**: Regex matches both relative and absolute URLs (from email client quoting)
 
+### Security Hardening
+
+- **SSRF protection** on external URL fetching (webhook URLs, knowledge source URLs)
+- **Prompt injection mitigation** in AI-generated content
+- **Sensitive data redaction** in ecommerce API logs
+- **AI-generated HTML sanitisation** before editor insertion
+- **Internal error details** no longer leak to API clients
+- **Inbox ID override validation** on message send
+- **OpenRouter API key encryption** at rest in the database
+
 ### DMARC / Forwarding Sender Detection
 
 Google Workspace rewrites the `From:` header on forwarded emails for DMARC compliance, causing all messages to show the group address instead of the real sender. This fork detects and corrects the real sender:
@@ -243,9 +380,20 @@ Google Workspace rewrites the `From:` header on forwarded emails for DMARC compl
 - **Non-image inline attachments**: When a non-image file (e.g., PDF) is referenced via CID in an `<img>` tag, it renders as a styled download link instead of a broken image
 - **CID replacement**: Fixed missing CID-to-URL replacement after initial attachment upload
 
+### Relative Timestamps
+
+Message timestamps show relative time with the full date in parentheses:
+- "Just now", "5 minutes ago", "2 hours ago", "3 days ago"
+- Format: `2 days ago (Mon, 3 Mar 2026 at 7:50 AM)`
+- Falls back to full date format after 30 days
+
 ### Fullscreen Reply Editor
 
 The fullscreen compose mode now uses 92% of the viewport (up from 60% width / 70% height), matching the Freshdesk compose experience. The sidebar toggle button also persists when viewing a conversation, allowing the nav sidebar to be collapsed for more screen space.
+
+### Unread Count Accuracy
+
+The unread message count badge now excludes activity messages (assignment changes, status updates, etc.), showing only actual messages from contacts and agents.
 
 ### Other UI Customisations
 
@@ -304,16 +452,45 @@ docker exec -it libredesk_app ./libredesk --set-system-user-password
 
 Go to `http://localhost:9000` and login with username `System` and the password you set.
 
+### Frontend Layout (v2)
+
+v2 ships a frontend monorepo under `frontend/`:
+
+- `frontend/apps/main/` — the agent / admin Vue app
+- `frontend/apps/widget/` — the embeddable customer-facing live chat widget
+- `frontend/shared-ui/` — shared components, composables, and assets consumed by both apps
+
+The Docker build assembles both apps into the Go binary via `stuffbin`. If you're developing locally, each app has its own `package.json` and Vite config.
+
+### AI-Powered Responses (RAG)
+
+The AI assistant uses PostgreSQL with pgvector for semantic search.
+
+**Docker:** Already included — uses `pgvector/pgvector:pg17` image.
+
+**Manual install:** Install the pgvector extension:
+- Ubuntu/Debian: `apt install postgresql-17-pgvector`
+- Or compile from [pgvector/pgvector](https://github.com/pgvector/pgvector)
+
+The extension is automatically enabled during database migration.
+
+---
+- If you are interested in contributing, **please read [CONTRIBUTING.md](./CONTRIBUTING.md) first**.
+- For local development and setup, refer to the [developer setup](https://docs.libredesk.io/contributing/developer-setup).
+- For planned features and project direction, see [ROADMAP.md](./ROADMAP.md).
+
 ## Keeping Up with Upstream
 
-When a new upstream version is released:
+For minor upstream releases (same major version), the usual cherry-pick flow works:
 
 ```shell
 git fetch origin --tags
-git checkout -b feature/openrouter-vX.Y.Z vX.Y.Z
-git cherry-pick <your-custom-commits>
+git checkout -b vX.Y.Z-plus-enhancements vX.Y.Z
+git cherry-pick <fork-commits>
 # Resolve any conflicts, rebuild, deploy
 ```
+
+For major-version transitions — like the v1.0.3 → v2.1.1 jump that produced this branch — we use a deliberate spec-driven port instead of a one-shot cherry-pick: every feature is listed as a unit in a design doc, each unit becomes one well-described commit, and the doc tracks `pending` → `done <hash>` status. See [`docs/superpowers/specs/2026-04-27-v103-port-design.md`](./docs/superpowers/specs/2026-04-27-v103-port-design.md) for the template — it's the source of truth for what got ported and why, and a reference for the next major-version transition.
 
 ---
 
