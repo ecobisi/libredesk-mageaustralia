@@ -438,11 +438,18 @@ This fork is designed for self-hosting with local Docker builds. It is **not** p
 ### Docker (Recommended)
 
 ```shell
-git clone https://github.com/mageaustralia/libredesk/.git
+git clone https://github.com/mageaustralia/libredesk.git
 cd libredesk
 
+# Check out this branch
+git checkout v2.1.1-plus-enhancements
+
 cp config.sample.toml config.toml
-# Edit config.toml as needed
+
+# TODO: Edit config.toml as needed
+
+# Compile the solution
+make
 
 docker compose up -d
 
