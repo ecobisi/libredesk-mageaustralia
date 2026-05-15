@@ -1010,7 +1010,7 @@
   "validation.invalidDomain": "अवैध डोमेन: {domain}. फक्त डोमेन नावे प्रविष्ट करा (उदा. example.com), प्रोटोकॉल किंवा पथ नको.",
   "validation.invalidDuration": "अवैध कालावधी फॉरमॅट. कृपया वैध फॉरमॅट वापरा (उदा. 30m, 1h, 48h).",
   "validation.invalidEmail": "अवैध ईमेल पत्ता",
-  "validation.invalidFromAddress": "अवैध 'From' ईमेल पत्ता, `Name <mail@example.com>` अशा फॉरमॅटमध्ये असावा",
+  "validation.invalidFromAddress": "अवैध 'From' ईमेल पत्ता, `Name <mail{'@'}example.com>` अशा फॉरमॅटमध्ये असावा",
   "validation.invalidIPOrCIDR": "अवैध IP पत्ता किंवा CIDR श्रेणी: {entry}",
   "validation.invalidInbox": "अवैध इनबॉक्स",
   "validation.invalidKey": "अवैध की",

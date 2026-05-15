@@ -1010,7 +1010,7 @@
   "validation.invalidDomain": "Dominio non valido: {domain}. Inserisci solo nomi di dominio (es. example.com), senza protocollo o percorsi.",
   "validation.invalidDuration": "Formato durata non valido. Utilizza un formato valido (es. 30m, 1h, 48h).",
   "validation.invalidEmail": "Indirizzo email non valido",
-  "validation.invalidFromAddress": "Non valido dal formato dell'indirizzo email, assicurati che sia un indirizzo email valido nel formato `Nome <mail@example.com>`",
+  "validation.invalidFromAddress": "Indirizzo email del mittente (From) non valido, assicurati che sia un indirizzo email valido nel formato `Nome <mail{'@'}example.com>`",
   "validation.invalidIPOrCIDR": "Indirizzo IP o intervallo CIDR non valido: {entry}",
   "validation.invalidInbox": "Casella di posta non valida",
   "validation.invalidKey": "Chiave non valida",

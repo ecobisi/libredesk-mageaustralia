@@ -1010,7 +1010,7 @@
   "validation.invalidDomain": "無効なドメイン: {domain}。ドメイン名のみを入力してください（例: example.com）。プロトコルやパスは不要です。",
   "validation.invalidDuration": "無効な期間形式です。有効な形式を使用してください（例：30m、1h、48h）。",
   "validation.invalidEmail": "メールアドレスが正しくありません",
-  "validation.invalidFromAddress": "メールアドレスの形式が無効です。`Name <mail@example.com>` 形式の有効なメールアドレスであることを確認してください",
+  "validation.invalidFromAddress": "メールアドレスの形式が無効です。`Name <mail{'@'}example.com>` 形式の有効なメールアドレスであることを確認してください",
   "validation.invalidIPOrCIDR": "無効なIPアドレスまたはCIDR範囲：{entry}",
   "validation.invalidInbox": "無効な受信トレイ",
   "validation.invalidKey": "無効なキー",

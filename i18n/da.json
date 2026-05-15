@@ -1010,7 +1010,7 @@
   "validation.invalidDomain": "Ugyldigt domæne: {domain}. Indtast kun domænenavne (f.eks. example.com), uden protokol eller stier.",
   "validation.invalidDuration": "Ugyldigt varighedsformat. Brug venligst et gyldigt format (f.eks. 30m, 1h, 48h).",
   "validation.invalidEmail": "Ugyldig e-mailadresse",
-  "validation.invalidFromAddress": "Ugyldigt \"fra e-mailadresse\" format. Sørg for, at det er en gyldig e-mailadresse i formatet `Navn <mail@eksempel.com>`",
+  "validation.invalidFromAddress": "Ugyldigt \"fra e-mailadresse\" format. Sørg for, at det er en gyldig e-mailadresse i formatet `Navn <mail{'@'}eksempel.com>`",
   "validation.invalidIPOrCIDR": "Ugyldig IP-adresse eller CIDR-interval: {entry}",
   "validation.invalidInbox": "Ugyldig indbakke",
   "validation.invalidKey": "Ugyldig nøgle",

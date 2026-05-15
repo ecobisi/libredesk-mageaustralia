@@ -1010,7 +1010,7 @@
   "validation.invalidDomain": "Ungültige Domain: {domain}. Geben Sie nur Domainnamen ein (z. B. example.com), ohne Protokoll oder Pfade.",
   "validation.invalidDuration": "Ungültiges Dauerformat. Bitte verwenden Sie ein gültiges Format (z. B. 30m, 1h, 48h).",
   "validation.invalidEmail": "Ungültige E-Mail-Adresse",
-  "validation.invalidFromAddress": "Ungültiges Format für die E-Mail-Adresse. Stelle sicher, dass es eine gültige E-Mail-Adresse im Format `Name <mail@example.com> ist",
+  "validation.invalidFromAddress": "Ungültiges Format für die E-Mail-Adresse. Stelle sicher, dass es eine gültige E-Mail-Adresse im Format `Name <mail{'@'}example.com> ist",
   "validation.invalidIPOrCIDR": "Ungültige IP-Adresse oder CIDR-Bereich: {entry}",
   "validation.invalidInbox": "Ungültiger Posteingang",
   "validation.invalidKey": "Ungültiger Schlüssel",

@@ -1010,7 +1010,7 @@
   "validation.invalidDomain": "دامنه نامعتبر: {domain}. فقط نام دامنه را وارد کنید (مثل example.com)، بدون پروتکل یا مسیر.",
   "validation.invalidDuration": "فرمت مدت‌زمان نامعتبر. لطفاً از فرمت معتبر استفاده کنید (مثل 30m، 1h، 48h).",
   "validation.invalidEmail": "آدرس ایمیل نامعتبر",
-  "validation.invalidFromAddress": "فرمت آدرس ایمیل ارسالی نامعتبر است، مطمئن شوید که در فرمت `نام <mail@example.com>` باشد",
+  "validation.invalidFromAddress": "فرمت آدرس ایمیل ارسالی نامعتبر است، مطمئن شوید که در فرمت `نام <mail{'@'}example.com>` باشد",
   "validation.invalidIPOrCIDR": "آدرس IP یا محدوده CIDR نامعتبر: {entry}",
   "validation.invalidInbox": "صندوق ورودی نامعتبر",
   "validation.invalidKey": "کلید نامعتبر",
