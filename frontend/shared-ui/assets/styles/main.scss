@@ -54,6 +54,7 @@
     // Stop emails with explicit width/height attributes from forcing a
     // wider rendered width than the message bubble.
     img {
+      width: auto;
       max-width: 100%;
       height: auto;
       cursor: zoom-in;
