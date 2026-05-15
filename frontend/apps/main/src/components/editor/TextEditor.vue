@@ -319,6 +319,105 @@ const handlePaste = (view, event) => {
   return false
 }
 
+// transformPastedHTML — strip presentation styles from pasted HTML before
+// ProseMirror parses it into the editor schema.
+//
+// Why: when an agent composes a reply in dark mode and pastes content
+// from another dark-mode app (ChatGPT, VS Code, Notion, etc.), the
+// clipboard HTML carries inline styles like `color: rgb(255,255,255)`.
+// The agent doesn't see the white text against the dark editor, sends
+// the reply, and the customer (reading on a light email client) sees
+// blank space where the white-on-white text should be.
+//
+// What we strip:
+//  - The full `style` attribute on inline/block elements that have no
+//    legitimate need for it (<p>, <div>, <span>, <font>, headings,
+//    lists). Structural spacing comes from the tag itself.
+//  - The problematic CSS properties only (color, background*, font-*,
+//    text-shadow, opacity, filter) on elements where some styles ARE
+//    load-bearing (<img>, table elements) — leaves width/height/border
+//    /padding alone.
+//  - `class` attributes (usually Tailwind/etc. from the source app).
+//  - Legacy `color` and `bgcolor` HTML attributes.
+//  - `<font>` tags entirely (unwrapped to spans).
+//
+// What we keep: all structural tags (<p>, <div>, <br>, <ul>, <ol>, <li>,
+// <h1-6>, <strong>, <em>, <a>, <code>, <pre>, <blockquote>, tables, images),
+// spacing implied by block-level tags, href on links, src/alt on images.
+const PROBLEMATIC_STYLE_PROPS = new Set([
+  'color',
+  'background',
+  'background-color',
+  'background-image',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'font-style',
+  'text-shadow',
+  'opacity',
+  'filter',
+  '-webkit-text-fill-color',
+  '-webkit-text-stroke',
+  'caret-color'
+])
+
+const PRESERVE_STYLE_ON = new Set([
+  'IMG', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD',
+  'COLGROUP', 'COL'
+])
+
+const stripProblematicStyles = (styleAttr) => {
+  return styleAttr
+    .split(';')
+    .map((decl) => decl.trim())
+    .filter((decl) => {
+      if (!decl) return false
+      const prop = decl.split(':')[0]?.trim().toLowerCase()
+      return prop && !PROBLEMATIC_STYLE_PROPS.has(prop)
+    })
+    .join('; ')
+}
+
+const cleanPastedNode = (el, doc) => {
+  if (!el || el.nodeType !== 1) return
+
+  if (el.tagName === 'FONT') {
+    const span = doc.createElement('span')
+    while (el.firstChild) span.appendChild(el.firstChild)
+    el.replaceWith(span)
+    cleanPastedNode(span, doc)
+    return
+  }
+
+  if (el.hasAttribute('color')) el.removeAttribute('color')
+  if (el.hasAttribute('bgcolor')) el.removeAttribute('bgcolor')
+  if (el.hasAttribute('class')) el.removeAttribute('class')
+
+  const style = el.getAttribute('style')
+  if (style) {
+    if (PRESERVE_STYLE_ON.has(el.tagName)) {
+      const cleaned = stripProblematicStyles(style)
+      if (cleaned) el.setAttribute('style', cleaned)
+      else el.removeAttribute('style')
+    } else {
+      el.removeAttribute('style')
+    }
+  }
+
+  Array.from(el.children).forEach((child) => cleanPastedNode(child, doc))
+}
+
+const transformPastedHTML = (html) => {
+  if (!html) return html
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    cleanPastedNode(doc.body, doc)
+    return doc.body.innerHTML
+  } catch {
+    return html
+  }
+}
+
 // Drop handler: image files go inline, everything else is emitted as
 // `filesDropped` so the parent can attach them as regular attachments.
 const handleDrop = (view, event) => {
@@ -632,6 +731,7 @@ const editor = useEditor({
     attributes: { class: 'outline-none' },
     getSuggestions: props.getSuggestions,
     handlePaste,
+    transformPastedHTML,
     handleDrop,
     handleKeyDown: (view, event) => {
       if (event.ctrlKey && event.key.toLowerCase() === 'b') {
