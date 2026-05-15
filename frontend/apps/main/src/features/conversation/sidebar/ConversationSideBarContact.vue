@@ -339,6 +339,11 @@ const changeContact = async (contact) => {
       phone_number: contact.phone_number,
       phone_number_country_code: contact.phone_number_country_code
     }
+    // FS24: tell the recipients watchEffect that the contact was just
+    // reassigned. Without this the reply box's TO field stays on the
+    // previous contact (e.g. the forwarder on a forwarded ticket) because
+    // the watchEffect derives TO from the latest message's headers.
+    conversationStore.markContactChanged()
     closeContactSearch()
     emitter.emit(EMITTER_EVENTS.SHOW_TOAST, {
       description: t('conversation.contactUpdated')
